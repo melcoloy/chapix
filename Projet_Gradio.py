@@ -85,7 +85,7 @@ def calculer_erreur(domino, cible1, cible2):
     else:
         return erreur_sens_inverse, (domino[1], domino[0])
 
-def optimiser_placement_recuit(cibles, emplacements, inventaire, iterations=10000000):
+def optimiser_placement_recuit(cibles, emplacements, inventaire, iterations=1e6):
     """
     Algorithme de recuit simulé pour placer les dominos.
     
