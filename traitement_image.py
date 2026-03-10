@@ -104,3 +104,4 @@ def dessiner_mosaique(placements, lignes, colonnes, taille_case=40):
 
 if __name__ == "__main__":
     print("Fichier traitement_image.py prêt.")
+    
