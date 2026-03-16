@@ -1,6 +1,6 @@
 import streamlit as st
 import numpy as np
-from PIL import Image, ImageOps, ImageDraw
+from PIL import Image, ImageOps, ImageDraw, ImageFilter, ImageChops
 import random
 import math
 import io
@@ -23,6 +23,21 @@ def valeurs_grille(image, type_jeu="double_six"):
     matrice_valeurs = val_max - matrice_valeurs 
     return matrice_valeurs
 
+def accentuer_contours(image_pil):
+    """Dessine des traits noirs sur les contours pour détacher le sujet du fond."""
+    img_gray = image_pil.convert("L")
+    edges = img_gray.filter(ImageFilter.FIND_EDGES)
+    
+    # On nettoie pour ne garder que les lignes franches (seuil de tolérance > 30)
+    edges = edges.point(lambda p: 255 if p > 30 else 0)
+    
+    # Inversion : on veut des lignes noires sur fond blanc
+    edges_inv = ImageOps.invert(edges)
+    
+    # Produit : On superpose les lignes noires sur l'image d'origine
+    img_finale = ImageChops.multiply(img_gray, edges_inv)
+    return img_finale
+
 def generer_inventaire(nb_dominos_necessaires, type_jeu="double_six"):
     val_max = 6 if type_jeu == "double_six" else 9
     jeu_de_base = [(i, j) for i in range(val_max + 1) for j in range(i, val_max + 1)]
@@ -37,6 +52,27 @@ def generer_inventaire(nb_dominos_necessaires, type_jeu="double_six"):
         inventaire_final.extend(random.sample(jeu_de_base, reste))
         
     return inventaire_final
+
+def calculer_largeur_ideale(image_pil):
+    """
+    Analyse la complexité de l'image (densité des contours) 
+    pour recommander un nombre de dominos en largeur.
+    """
+    # 1. On passe l'image en niveaux de gris et on détecte les contours
+    image_bords = image_pil.convert("L").filter(ImageFilter.FIND_EDGES)
+    matrice_bords = np.array(image_bords)
+    
+    # 2. On calcule le pourcentage de pixels "blancs" (qui sont des contours)
+    densite_contours = np.sum(matrice_bords) / (matrice_bords.shape[0] * matrice_bords.shape[1] * 255)
+    
+    # 3. Étalonnage mathématique :
+    # Si densité très faible (logo) -> ~50 dominos
+    # Si densité moyenne (portrait) -> ~80 dominos
+    # Si densité forte (paysage) -> ~120 dominos
+    largeur_estimee = int(40 + (densite_contours * 800))
+    
+    # On borne le résultat pour rester raisonnable
+    return max(40, min(150, largeur_estimee))
 
 def generer_emplacements(largeur_grille, hauteur_grille):
     grille_occupee = [[False] * largeur_grille for _ in range(hauteur_grille)]
@@ -150,11 +186,7 @@ st.set_page_config(page_title="Mosaïque de dominos (V2)", layout="wide")
 st.title("🎲 Générateur de Mosaïque en Dominos")
 st.write("Projet P4 - Par Matteo Hanon Obsomer & Clément Leroy")
 
-# --- Barre latérale ---
-st.sidebar.header("Paramètres")
-type_jeu = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"))
-largeur_grille = st.sidebar.slider("Largeur (en nombre de dominos)", min_value=60, max_value=120, value=80, step=10)
-btn_generer = st.sidebar.button("Générer la mosaïque", type="primary")
+
 
 col1, col2 = st.columns(2)
 
@@ -164,6 +196,25 @@ with col1:
     if fichier_upload is not None:
         image_originale = Image.open(fichier_upload)
         st.image(image_originale, caption="Image importée", width='stretch')
+
+# --- Barre latérale ---
+st.sidebar.header("Paramètres")
+type_jeu = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"))
+if st.sidebar.button("📏 Calculer la largeur optimale"):
+    if fichier_upload is not None:
+        # 1. On récupère la valeur recommandée par ton algorithme
+        largeur = calculer_largeur_ideale(image_originale)
+        
+        # 2. On l'arrondit à la dizaine la plus proche
+        largeur_arrondie = round(largeur / 10) * 10
+        
+        # 3. On contraint la valeur entre 80 et 160
+        st.session_state.slider_largeur = max(80, min(160, largeur_arrondie))
+    else:
+        st.sidebar.warning("Chargez d'abord une image au centre !")
+largeur_grille = st.sidebar.slider("Largeur (en nombre de dominos)", min_value=80, max_value=160, step=10, key="slider_largeur")
+contour_fort = st.sidebar.checkbox("🖊️ Accentuer les contours (Sépare le sujet de l'arrière-plan)")
+btn_generer = st.sidebar.button("Générer la mosaïque", type="primary")
 
 with col2:
     st.header("Résultat")
@@ -182,8 +233,11 @@ with col2:
         
         # 2. Exécution du flux avec indicateurs visuels
         st.info(f"📐 Grille calculée : {largeur_grille}x{hauteur_grille} cases ({nb_dominos} dominos au total)")
-        
-        image_prete = transfo_image(image_originale, largeur_grille, hauteur_grille)
+        if contour_fort:
+            image_prete = accentuer_contours(image_originale)
+        else:
+            image_prete = image_originale
+        image_prete = transfo_image(image_prete, largeur_grille, hauteur_grille)
         matrice = valeurs_grille(image_prete, type_jeu)
         inventaire = generer_inventaire(nb_dominos, type_jeu)
         emplacements = generer_emplacements(largeur_grille, hauteur_grille)
@@ -195,8 +249,7 @@ with col2:
         # Rendu final
         with st.spinner("Dessin des dominos..."):
             image_mosaique = creer_mosaique_finale(emplacements, placement, largeur_grille, hauteur_grille, taille_case)
-            # Redimensionnement exact à la taille d'origine
-            image_mosaique = image_mosaique.resize((largeur_px, hauteur_px), Image.Resampling.LANCZOS)
+            
         # 5. Téléchargement
         buf = io.BytesIO()
         image_mosaique.save(buf, format="PNG")
