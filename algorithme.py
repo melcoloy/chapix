@@ -2,108 +2,127 @@ import numpy as np
 
 def generer_inventaire(type_jeu="double_six", nb_boites=1):
     """Génère la liste des dominos (tuples) selon le jeu choisi."""
-    if type_jeu == "double_six":
-        valeur_max = 6
-    else:
-        valeur_max = 9
+    valeur_max = 6 if type_jeu == "double_six" else 9
     boite_unique = []
     
-    # Création d'une boîte complète de dominos
     for i in range(valeur_max + 1):
         for j in range(i, valeur_max + 1):
             boite_unique.append((i, j))
             
-    # On multiplie par le nombre total de boîtes 
     jeu_complet = boite_unique * nb_boites
     return jeu_complet
 
 def placer_dominos(matrice_valeurs, stock_dominos):
     """
-    Parcourt la matrice et place les dominos de façon gloutonne INTELLIGENTE.
-    Teste l'orientation Horizontale ET Verticale pour épouser les contours de l'image.
+    Algorithme 100% garanti SANS TROUS :
+    1. Pavage initial trivial (tout horizontal ou vertical).
+    2. Optimisation par permutations 2x2 (Swapping) pour suivre les contours.
+    3. Remplissage glouton final avec l'inventaire.
     """
     lignes, colonnes = matrice_valeurs.shape
-    couvert = np.zeros((lignes, colonnes), dtype=bool)
+    placements_slots = []
+    grille_slots = np.zeros((lignes, colonnes), dtype=int)
+    
+    # --- ETAPE 1 : Pavage de base (Zéro trou garanti) ---
+    idx = 0
+    # On sait que la surface cible est paire. Soit colonnes est pair, soit lignes est pair.
+    if colonnes % 2 == 0:
+        for i in range(lignes):
+            for j in range(0, colonnes, 2):
+                placements_slots.append([(i, j), (i, j+1)])
+                grille_slots[i, j] = idx
+                grille_slots[i, j+1] = idx
+                idx += 1
+    else:
+        for j in range(colonnes):
+            for i in range(0, lignes, 2):
+                placements_slots.append([(i, j), (i+1, j)])
+                grille_slots[i, j] = idx
+                grille_slots[i+1, j] = idx
+                idx += 1
+                
+    # --- ETAPE 2 : Optimisation (Swapping intelligent des contours) ---
+    amelioration = True
+    iterations = 0
+    # On repasse sur l'image plusieurs fois (max 10) pour lisser les contours
+    while amelioration and iterations < 10:
+        amelioration = False
+        iterations += 1
+        for i in range(lignes - 1):
+            for j in range(colonnes - 1):
+                idx1 = grille_slots[i, j]
+                idx2 = grille_slots[i, j+1]
+                idx3 = grille_slots[i+1, j]
+                idx4 = grille_slots[i+1, j+1]
+                
+                # Cas A : On trouve 2 dominos horizontaux empilés
+                if idx1 == idx2 and idx3 == idx4 and idx1 != idx3:
+                    v_hg, v_hd = matrice_valeurs[i, j], matrice_valeurs[i, j+1]
+                    v_bg, v_bd = matrice_valeurs[i+1, j], matrice_valeurs[i+1, j+1]
+                    
+                    # On veut que les pixels sous un même domino soient de couleur similaire
+                    diff_H = abs(v_hg - v_hd) + abs(v_bg - v_bd)
+                    diff_V = abs(v_hg - v_bg) + abs(v_hd - v_bd)
+                    
+                    if diff_V < diff_H: # Le sens Vertical épouse mieux l'image !
+                        placements_slots[idx1] = [(i, j), (i+1, j)]
+                        placements_slots[idx3] = [(i, j+1), (i+1, j+1)]
+                        grille_slots[i, j] = idx1
+                        grille_slots[i+1, j] = idx1
+                        grille_slots[i, j+1] = idx3
+                        grille_slots[i+1, j+1] = idx3
+                        amelioration = True
+                        
+                # Cas B : On trouve 2 dominos verticaux côte à côte
+                elif idx1 == idx3 and idx2 == idx4 and idx1 != idx2:
+                    v_hg, v_hd = matrice_valeurs[i, j], matrice_valeurs[i, j+1]
+                    v_bg, v_bd = matrice_valeurs[i+1, j], matrice_valeurs[i+1, j+1]
+                    
+                    diff_H = abs(v_hg - v_hd) + abs(v_bg - v_bd)
+                    diff_V = abs(v_hg - v_bg) + abs(v_hd - v_bd)
+                    
+                    if diff_H < diff_V: # Le sens Horizontal épouse mieux l'image !
+                        placements_slots[idx1] = [(i, j), (i, j+1)]
+                        placements_slots[idx2] = [(i+1, j), (i+1, j+1)]
+                        grille_slots[i, j] = idx1
+                        grille_slots[i, j+1] = idx1
+                        grille_slots[i+1, j] = idx2
+                        grille_slots[i+1, j+1] = idx2
+                        amelioration = True
+
+    # --- ETAPE 3 : Assignation gloutonne du stock ---
     placements = []
     stock_restant = stock_dominos.copy()
     
-    for i in range(lignes):
-        for j in range(colonnes):
-            if couvert[i, j]:
-                continue
-                
-            valeur_1 = matrice_valeurs[i, j]
+    for slot in placements_slots:
+        c1, c2 = slot
+        val1 = matrice_valeurs[c1[0], c1[1]]
+        val2 = matrice_valeurs[c2[0], c2[1]]
+        
+        meilleur_ecart = 999
+        meilleur_idx = -1
+        inv = False
+        
+        # On cherche la meilleure pièce restante
+        for idx_dom, domino in enumerate(stock_restant):
+            d1, d2 = domino
+            err_norm = abs(val1 - d1) + abs(val2 - d2)
+            err_inv = abs(val1 - d2) + abs(val2 - d1)
+            min_err = min(err_norm, err_inv)
             
-            # On vérifie quelles directions sont possibles
-            peut_H = (j + 1 < colonnes) and not couvert[i, j + 1]
-            peut_V = (i + 1 < lignes) and not couvert[i + 1, j]
-            
-            meilleur_ecart_H, meilleur_idx_H, inv_H = 999, -1, False
-            meilleur_ecart_V, meilleur_idx_V, inv_V = 999, -1, False
-            
-            # On parcourt le stock pour évaluer les deux directions
-            for index, domino in enumerate(stock_restant):
-                d1, d2 = domino
+            if min_err < meilleur_ecart:
+                meilleur_ecart = min_err
+                meilleur_idx = idx_dom
+                inv = (err_inv < err_norm)
                 
-                # Test Horizontal
-                if peut_H:
-                    v2_H = matrice_valeurs[i, j + 1]
-                    err_H_norm = abs(valeur_1 - d1) + abs(v2_H - d2)
-                    err_H_inv = abs(valeur_1 - d2) + abs(v2_H - d1)
-                    min_err_H = min(err_H_norm, err_H_inv)
-                    if min_err_H < meilleur_ecart_H:
-                        meilleur_ecart_H = min_err_H
-                        meilleur_idx_H = index
-                        inv_H = (err_H_inv < err_H_norm)
-                
-                # Test Vertical
-                if peut_V:
-                    v2_V = matrice_valeurs[i + 1, j]
-                    err_V_norm = abs(valeur_1 - d1) + abs(v2_V - d2)
-                    err_V_inv = abs(valeur_1 - d2) + abs(v2_V - d1)
-                    min_err_V = min(err_V_norm, err_V_inv)
-                    if min_err_V < meilleur_ecart_V:
-                        meilleur_ecart_V = min_err_V
-                        meilleur_idx_V = index
-                        inv_V = (err_V_inv < err_V_norm)
-
-            # --- CORRECTION DU BUG : Le choix intelligent de l'orientation ---
-            if peut_H and peut_V:
-                choix = 'H' if meilleur_ecart_H <= meilleur_ecart_V else 'V'
-            elif peut_H:
-                choix = 'H'
-            elif peut_V:
-                choix = 'V'
-            else:
-                # La case est isolée ! On ne peut placer ni H ni V.
-                # On passe à la case suivante pour ne pas déborder de l'image.
-                continue
-                
-            # Application du choix
-            if choix == 'H':
-                i2, j2 = i, j + 1
-                best_idx = meilleur_idx_H
-                is_inv = inv_H
-            else:
-                i2, j2 = i + 1, j
-                best_idx = meilleur_idx_V
-                is_inv = inv_V
-                
-            domino_choisi = stock_restant.pop(best_idx)
+        domino_choisi = stock_restant.pop(meilleur_idx)
+        if inv:
+            domino_choisi = (domino_choisi[1], domino_choisi[0])
             
-            if is_inv:
-                domino_choisi = (domino_choisi[1], domino_choisi[0])
-                
-            placements.append({
-                "case1": (i, j),
-                "case2": (i2, j2),
-                "valeurs": domino_choisi
-            })
-            
-            couvert[i, j] = True
-            couvert[i2, j2] = True
-            
+        placements.append({
+            "case1": c1,
+            "case2": c2,
+            "valeurs": domino_choisi
+        })
+        
     return placements
-
-if __name__ == "__main__":
-    print("Fichier algorithme.py prêt.")

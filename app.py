@@ -107,12 +107,25 @@ with col2:
             # ajout d'un bouton permettant de télécharger l'image de domino
 
             # tsf de l'image PIL en données  binaires pour le navigateur
+            st.divider()
+            st.subheader("💾 Téléchargement")
+            
+            # 1. On demande à l'utilisateur le nom qu'il souhaite (avec une valeur par défaut)
+            nom_fichier = st.text_input("Nommez votre fichier :", value="ma_mosaique_dominos")
+            
+            # On s'assure que le fichier a bien l'extension .png à la fin
+            if not nom_fichier.endswith(".png"):
+                nom_fichier += ".png"
+
+            # 2. tsf de l'image PIL en données binaires pour le navigateur
             buf = io.BytesIO()
-            image_mosaique.save(buf,format="PNG")
+            image_mosaique.save(buf, format="PNG")
             donnees_image = buf.getvalue()
+            
+            # 3. On crée le bouton avec le nom personnalisé
             st.download_button(
-                label="💾 Télécharger la mosaïque en haute définition",
+                label=f"📥 Télécharger : {nom_fichier}",
                 data=donnees_image,
-                file_name="ma_mosaique_dominos.png",
+                file_name=nom_fichier,
                 mime="image/png"
             )
