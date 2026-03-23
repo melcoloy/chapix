@@ -1,15 +1,16 @@
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageOps, ImageFilter
 import math
 import numpy as np
 
-def preparer_image(image_originale, total_dominos):
+def preparer_image(image_originale, total_dominos, renforcer_contraste=False):
     """
     Convertit l'image en noir et blanc(niveau de gris) et la redimensionne 
     en utilisant les diviseurs parfaits pour vider 100% du stock.
     """
     image_nb = image_originale.convert("L") 
     image_nb = ImageOps.autocontrast(image_nb)
-    
+    if renforcer_contraste:
+        image_nb = image_nb.filter(ImageFilter.EDGE_ENHANCE_MORE)
     surface_cible = total_dominos * 2  
     
     largeur_orig, hauteur_orig = image_nb.size

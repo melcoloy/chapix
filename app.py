@@ -11,6 +11,9 @@ st.write("Projet P4 - Par Matteo Hanon Obsomer & Clément Leroy")
 st.sidebar.header("Paramètres")
 type_jeu = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"))
 nb_boites = st.sidebar.number_input("Nombre de boîtes", min_value=1, value=10, step=1)
+
+activer_contours = st.sidebar.checkbox("Activer la segmentation (Renforcer les contours)")
+
 btn_generer = st.sidebar.button("Générer la mosaïque")
 
 # --- Zone principale ---
@@ -35,7 +38,7 @@ with col2:
             total_dominos = len(stock_dominos)
             
             # 2. Prétraitement de l'image
-            image_prete = traitement_image.preparer_image(image_originale, total_dominos)
+            image_prete = traitement_image.preparer_image(image_originale, total_dominos, activer_contours)
             st.image(image_prete, caption=f"Image N&B ajustée ({image_prete.width}x{image_prete.height} px)", width=400)
             
             # 3. Conversion en matrice mathématique
@@ -104,12 +107,25 @@ with col2:
             # ajout d'un bouton permettant de télécharger l'image de domino
 
             # tsf de l'image PIL en données  binaires pour le navigateur
+            st.divider()
+            st.subheader("💾 Téléchargement")
+            
+            # 1. On demande à l'utilisateur le nom qu'il souhaite (avec une valeur par défaut)
+            nom_fichier = st.text_input("Nommez votre fichier :", value="ma_mosaique_dominos")
+            
+            # On s'assure que le fichier a bien l'extension .png à la fin
+            if not nom_fichier.endswith(".png"):
+                nom_fichier += ".png"
+
+            # 2. tsf de l'image PIL en données binaires pour le navigateur
             buf = io.BytesIO()
-            image_mosaique.save(buf,format="PNG")
+            image_mosaique.save(buf, format="PNG")
             donnees_image = buf.getvalue()
+            
+            # 3. On crée le bouton avec le nom personnalisé
             st.download_button(
-                label="💾 Télécharger la mosaïque en haute définition",
+                label=f"📥 Télécharger : {nom_fichier}",
                 data=donnees_image,
-                file_name="ma_mosaique_dominos.png",
+                file_name=nom_fichier,
                 mime="image/png"
             )
