@@ -139,12 +139,17 @@ def optimiser_placement_recuit(cibles, emplacements, inventaire, iterations=1e7,
 # ================
 # 2. RENDU VISUEL 
 # ================
-def dessiner_demi_domino(draw, x_px, y_px, taille_case, valeur):
-    # Fond blanc, bordure grise
-    draw.rectangle([x_px, y_px, x_px + taille_case, y_px + taille_case], fill="white", outline="lightgray")
+def dessiner_demi_domino(draw, x_px, y_px, taille_case, valeur, epaisseur_bordure):
+    # Fond blanc, bordure grise adaptative
+    draw.rectangle(
+        [x_px, y_px, x_px + taille_case, y_px + taille_case], 
+        fill="white", 
+        outline="darkgray", 
+        width=epaisseur_bordure
+    )
     if valeur == 0: return 
 
-    r = max(1, taille_case // 12)
+    r = max(1, taille_case // 6) # Points plus gros et bien ronds
     c, g, d, h, b, m = 0.5, 0.25, 0.75, 0.25, 0.75, 0.5  
     positions_points = {
         1: [(c, c)], 2: [(g, h), (d, b)], 3: [(g, h), (c, c), (d, b)],
@@ -159,25 +164,29 @@ def dessiner_demi_domino(draw, x_px, y_px, taille_case, valeur):
         cx, cy = x_px + pos_x * taille_case, y_px + pos_y * taille_case
         draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill="black")
 
-def creer_mosaique_finale(emplacements, placement_final, colonnes, lignes, taille_case=20):
+def creer_mosaique_finale(emplacements, placement_final, colonnes, lignes, taille_case=80):
     image_finale = Image.new("RGB", (colonnes * taille_case, lignes * taille_case), "white")
     draw = ImageDraw.Draw(image_finale)
+    
+    # Épaisseurs intelligentes qui s'adaptent à la HD
+    epaisseur_bordure = max(2, taille_case // 20)
+    epaisseur_gomme = (epaisseur_bordure * 2) + 2
     
     for i, ((x1_g, y1_g), (x2_g, y2_g)) in enumerate(emplacements):
         val1, val2 = placement_final[i]
         x1, y1 = x1_g * taille_case, y1_g * taille_case
         x2, y2 = x2_g * taille_case, y2_g * taille_case
         
-        dessiner_demi_domino(draw, x1, y1, taille_case, val1)
-        dessiner_demi_domino(draw, x2, y2, taille_case, val2)
+        dessiner_demi_domino(draw, x1, y1, taille_case, val1, epaisseur_bordure)
+        dessiner_demi_domino(draw, x2, y2, taille_case, val2, epaisseur_bordure)
         
-        # Effacer la ligne de séparation centrale avec du blanc
-        if y1_g == y2_g: draw.line([x2, y1 + 1, x2, y1 + taille_case - 1], fill="white", width=2)
-        else:            draw.line([x1 + 1, y2, x1 + taille_case - 1, y2], fill="white", width=2)
+        # Gommer la séparation interne sans écraser les points
+        if y1_g == y2_g: 
+            draw.line([x2, y1 + epaisseur_bordure, x2, y1 + taille_case - epaisseur_bordure], fill="white", width=epaisseur_gomme)
+        else:            
+            draw.line([x1 + epaisseur_bordure, y2, x1 + taille_case - epaisseur_bordure, y2], fill="white", width=epaisseur_gomme)
             
     return image_finale
-
-
 # ======================
 # 3. INTERFACE STREAMLIT
 # ======================
@@ -208,11 +217,11 @@ if st.sidebar.button("Calculer la largeur optimale"):
         largeur_arrondie = round(largeur / 10) * 10
         
         # 3. On contraint la valeur entre 80 et 160
-        st.session_state.slider_largeur = max(80, min(160, largeur_arrondie))
+        st.session_state.slider_largeur = max(60, min(160, largeur_arrondie))
     else:
         st.sidebar.warning("Chargez d'abord une image au centre !")
-largeur_grille = st.sidebar.slider("Largeur (en nombre de dominos)", min_value=80, max_value=160, step=10, key="slider_largeur")
-contour_fort = st.sidebar.checkbox("🖊️ Accentuer les contours (Sépare le sujet de l'arrière-plan)")
+largeur_grille = st.sidebar.slider("Largeur (en nombre de dominos)", min_value=60, max_value=160, step=10, key="slider_largeur")
+contour_fort = st.sidebar.checkbox("Accentuer les contours (Sépare le sujet de l'arrière-plan)")
 btn_generer = st.sidebar.button("Générer la mosaïque", type="primary")
 
 with col2:
@@ -228,7 +237,6 @@ with col2:
             hauteur_grille += 1
             
         nb_dominos = (largeur_grille * hauteur_grille) // 2
-        taille_case = max(1, largeur_px // largeur_grille)
         
         # 2. Exécution du flux avec indicateurs visuels
         st.info(f"📐 Grille calculée : {largeur_grille}x{hauteur_grille} cases ({nb_dominos} dominos au total)")
@@ -247,7 +255,7 @@ with col2:
         
         # Rendu final
         with st.spinner("Dessin des dominos..."):
-            image_mosaique = creer_mosaique_finale(emplacements, placement, largeur_grille, hauteur_grille, taille_case)
+            image_mosaique = creer_mosaique_finale(emplacements, placement, largeur_grille, hauteur_grille, taille_case=80)
             
         # 5. Téléchargement
         buf = io.BytesIO()
