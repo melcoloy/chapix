@@ -5,7 +5,6 @@ import random
 import math
 import io
 import pandas as pd
-from collections import Counter
 
 # ==========================================
 # 1. FONCTIONS MATHÉMATIQUES ET ALGORITHMES
@@ -182,7 +181,7 @@ def creer_mosaique_finale(emplacements, placement_final, colonnes, lignes, taill
 # ======================
 # 3. INTERFACE STREAMLIT
 # ======================
-st.set_page_config(page_title="Mosaïque de dominos (V2)", layout="wide")
+st.set_page_config(page_title="Mosaïque de dominos", layout="wide")
 st.title("🎲 Générateur de Mosaïque en Dominos")
 st.write("Projet P4 - Par Matteo Hanon Obsomer & Clément Leroy")
 
@@ -200,7 +199,7 @@ with col1:
 # --- Barre latérale ---
 st.sidebar.header("Paramètres")
 type_jeu = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"))
-if st.sidebar.button("📏 Calculer la largeur optimale"):
+if st.sidebar.button("Calculer la largeur optimale"):
     if fichier_upload is not None:
         # 1. On récupère la valeur recommandée par ton algorithme
         largeur = calculer_largeur_ideale(image_originale)
