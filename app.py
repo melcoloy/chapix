@@ -84,7 +84,7 @@ with col2:
             if choix_algo == "Glouton (Rapide, par le centre)":
                 placements = algorithme.placer_dominos(matrice_valeurs, stock_dominos)
             else:
-                placements = algorithme_hongrois.placer_dominos(matrice_valeurs, stock_dominos)
+                placements = hongrois_v1.placer_dominos(matrice_valeurs, stock_dominos)
                 
             heure_fin = time.time()
             temps_execution = heure_fin - heure_debut 
