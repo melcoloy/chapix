@@ -5,6 +5,7 @@ import random
 import math
 import io
 import pandas as pd
+from scipy.optimize import linear_sum_assignment
 
 # ==========================================
 # 1. FONCTIONS MATHÉMATIQUES ET ALGORITHMES
@@ -37,7 +38,7 @@ def accentuer_contours(image_pil):
     img_finale = ImageChops.multiply(img_gray, edges_inv)
     return img_finale
 
-def generer_inventaire(nb_dominos_necessaires, type_jeu="double_six"):
+def generer_inventaire(nb_dominos_necessaires, type_jeu="double_six", matrice_cibles=None):
     val_max = 6 if type_jeu == "double_six" else 9
     jeu_de_base = [(i, j) for i in range(val_max + 1) for j in range(i, val_max + 1)]
     taille_jeu = len(jeu_de_base)
@@ -47,9 +48,30 @@ def generer_inventaire(nb_dominos_necessaires, type_jeu="double_six"):
     inventaire_final = []
     for _ in range(nb_jeux_complets):
         inventaire_final.extend(jeu_de_base)
-    if reste > 0:
-        inventaire_final.extend(random.sample(jeu_de_base, reste))
         
+    if reste > 0:
+        if matrice_cibles is not None:
+            # --- MÉTHODE INTELLIGENTE ---
+            # 1. Compter combien de fois chaque valeur (0 à 6) est demandée par l'image
+            valeurs, clics = np.unique(matrice_cibles, return_counts=True)
+            frequences = dict(zip(valeurs, clics))
+            
+            # 2. Donner un "score d'utilité" à chaque domino
+            dominos_scores = []
+            for domino in jeu_de_base:
+                score = frequences.get(domino[0], 0) + frequences.get(domino[1], 0)
+                dominos_scores.append((score, domino))
+                
+            # 3. Trier du plus utile au moins utile
+            dominos_scores.sort(key=lambda x: x[0], reverse=True)
+            
+            # 4. Prendre exactement les pièces manquantes dont on a le plus besoin !
+            pieces_restantes = [domino for score, domino in dominos_scores[:reste]]
+            inventaire_final.extend(pieces_restantes)
+        else:
+            # Sécurité : au hasard si aucune image n'est fournie
+            inventaire_final.extend(random.sample(jeu_de_base, reste))
+            
     return inventaire_final
 
 def calculer_largeur_ideale(image_pil):
@@ -136,6 +158,53 @@ def optimiser_placement_recuit(cibles, emplacements, inventaire, iterations=1e7,
     if st_progress_bar: st_progress_bar.empty()
     return placement_final
 
+def optimiser_placement_hongrois(cibles, emplacements, inventaire, st_progress_bar=None):
+    """
+    Trouve l'affectation 100% optimale en utilisant la méthode hongroise (Linear Sum Assignment).
+    """
+    nb_emplacements = len(emplacements)
+    
+    if st_progress_bar:
+        st_progress_bar.progress(0.1, text="Étape 1 : Calcul de la matrice des coûts (Peut prendre quelques secondes)...")
+        
+    # 1. Création de la matrice des coûts (Lignes = Emplacements, Colonnes = Dominos)
+    matrice_couts = np.zeros((nb_emplacements, nb_emplacements), dtype=int)
+    
+    # On pré-calcule les cibles pour aller plus vite dans la boucle
+    valeurs_cibles = [(cibles[y1, x1], cibles[y2, x2]) for ((x1, y1), (x2, y2)) in emplacements]
+    
+    for i, (cible1, cible2) in enumerate(valeurs_cibles):
+        for j, domino in enumerate(inventaire):
+            # On calcule l'erreur dans les deux sens et on garde la meilleure
+            err_norm = abs(domino[0] - cible1) + abs(domino[1] - cible2)
+            err_inv = abs(domino[1] - cible1) + abs(domino[0] - cible2)
+            matrice_couts[i, j] = err_norm if err_norm < err_inv else err_inv
+
+    if st_progress_bar:
+        st_progress_bar.progress(0.5, text="Étape 2/2 : Résolution mathématique exacte...")
+
+    # 2. Résolution du problème d'affectation
+    row_ind, col_ind = linear_sum_assignment(matrice_couts)
+    
+    # 3. Construction du placement final dans le bon sens
+    placement_final = []
+    for i, j in enumerate(col_ind): # i = index emplacement, j = index du domino choisi
+        domino = inventaire[j]
+        cible1, cible2 = valeurs_cibles[i]
+        
+        err_norm = abs(domino[0] - cible1) + abs(domino[1] - cible2)
+        err_inv = abs(domino[1] - cible1) + abs(domino[0] - cible2)
+        
+        if err_norm <= err_inv:
+            placement_final.append(domino)
+        else:
+            placement_final.append((domino[1], domino[0]))
+            
+    if st_progress_bar: 
+        st_progress_bar.empty()
+        
+    return placement_final
+
 # ================
 # 2. RENDU VISUEL 
 # ================
@@ -187,14 +256,13 @@ def creer_mosaique_finale(emplacements, placement_final, colonnes, lignes, taill
             draw.line([x1 + epaisseur_bordure, y2, x1 + taille_case - epaisseur_bordure, y2], fill="white", width=epaisseur_gomme)
             
     return image_finale
+
 # ======================
 # 3. INTERFACE STREAMLIT
 # ======================
 st.set_page_config(page_title="Mosaïque de dominos", layout="wide")
 st.title("🎲 Générateur de Mosaïque en Dominos")
 st.write("Projet P4 - Par Matteo Hanon Obsomer & Clément Leroy")
-
-
 
 col1, col2 = st.columns(2)
 
@@ -221,7 +289,10 @@ if st.sidebar.button("Calculer la largeur optimale"):
     else:
         st.sidebar.warning("Chargez d'abord une image au centre !")
 largeur_grille = st.sidebar.slider("Largeur (en nombre de dominos)", min_value=60, max_value=160, step=10, key="slider_largeur")
-contour_fort = st.sidebar.checkbox("Accentuer les contours (Sépare le sujet de l'arrière-plan)")
+contour_fort = st.sidebar.checkbox("Accentuer les contours")
+# Choix de l'algorithme d'optimisation
+methode_calcul = st.sidebar.radio("Algorithme de placement :", ("Recuit Simulé", "Méthode Hongroise"))
+
 btn_generer = st.sidebar.button("Générer la mosaïque", type="primary")
 
 with col2:
@@ -246,12 +317,15 @@ with col2:
             image_prete = image_originale
         image_prete = transfo_image(image_prete, largeur_grille, hauteur_grille)
         matrice = valeurs_grille(image_prete, type_jeu)
-        inventaire = generer_inventaire(nb_dominos, type_jeu)
+        inventaire = generer_inventaire(nb_dominos, type_jeu,matrice)
         emplacements = generer_emplacements(largeur_grille, hauteur_grille)
         
         # Barre de progression passée à l'algorithme !
         my_bar = st.progress(0, text="Optimisation des pièces en cours...")
-        placement = optimiser_placement_recuit(matrice, emplacements, inventaire, iterations=150000, st_progress_bar=my_bar)
+        if "Hongroise" in methode_calcul:
+            placement = optimiser_placement_hongrois(matrice, emplacements, inventaire, st_progress_bar=my_bar)
+        else:
+            placement = optimiser_placement_recuit(matrice, emplacements, inventaire, iterations=150000, st_progress_bar=my_bar)
         
         # Rendu final
         with st.spinner("Dessin des dominos..."):
