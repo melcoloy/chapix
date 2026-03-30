@@ -3,7 +3,7 @@ from PIL import Image
 import io
 import time
 import algorithme
-import algorithme_hongrois
+import hongrois_v1
 import traitement_image
 import base64
 import streamlit.components.v1 as components
