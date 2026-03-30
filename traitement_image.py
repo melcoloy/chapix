@@ -2,15 +2,18 @@ from PIL import Image, ImageDraw, ImageOps, ImageFilter
 import math
 import numpy as np
 
-def preparer_image(image_originale, total_dominos, renforcer_contraste=False):
+def preparer_image(image_originale, total_dominos, renforcer_contours=False):
     """
-    Convertit l'image en noir et blanc(niveau de gris) et la redimensionne 
+    Convertit l'image en noir et blanc (niveau de gris) et la redimensionne 
     en utilisant les diviseurs parfaits pour vider 100% du stock.
     """
     image_nb = image_originale.convert("L") 
     image_nb = ImageOps.autocontrast(image_nb)
-    if renforcer_contraste:
+    
+    # Segmentation optionnelle demandée par l'utilisateur
+    if renforcer_contours:
         image_nb = image_nb.filter(ImageFilter.EDGE_ENHANCE_MORE)
+    
     surface_cible = total_dominos * 2  
     
     largeur_orig, hauteur_orig = image_nb.size
@@ -34,17 +37,45 @@ def preparer_image(image_originale, total_dominos, renforcer_contraste=False):
     image_redimensionnee = image_nb.resize((nouvelle_largeur, nouvelle_hauteur))
     return image_redimensionnee
 
-def image_vers_matrice(image_pil, type_jeu="double_six"):
-    """Convertit l'image (0-255) en une matrice de dominos (0-6 ou 0-9)."""
+def image_vers_matrice(image_pil, type_jeu="double_six", appliquer_dithering=True):
+    """Convertit l'image en une matrice de dominos, avec propagation d'erreur (Floyd-Steinberg)."""
     valeur_max = 6 if type_jeu == "double_six" else 9
-    matrice_pixels = np.array(image_pil) 
-    matrice_dominos = matrice_pixels / 255.0 
-    matrice_dominos = matrice_dominos * valeur_max
-    matrice_dominos = np.round(matrice_dominos).astype(int)
     
-    # --- CORRECTION DE L'EFFET NÉGATIF ---
-    # Pour des dominos blancs à points noirs, un pixel noir sur la photo
-    # doit correspondre au domino avec le plus de points noirs (le 6 ou le 9).
+    # On travaille avec des nombres à virgule (float) pour garder l'erreur
+    matrice = np.array(image_pil, dtype=float)
+    matrice = (matrice / 255.0) * valeur_max
+    
+    lignes, colonnes = matrice.shape
+    
+    if appliquer_dithering:
+        # Algorithme de Floyd-Steinberg
+        for i in range(lignes):
+            for j in range(colonnes):
+                ancienne_valeur = matrice[i, j]
+                nouvelle_valeur = np.round(ancienne_valeur)
+                # On s'assure de ne pas dépasser les limites des dominos
+                nouvelle_valeur = min(valeur_max, max(0, nouvelle_valeur))
+                matrice[i, j] = nouvelle_valeur
+                
+                # Calcul de l'erreur d'arrondi
+                erreur = ancienne_valeur - nouvelle_valeur
+                
+                # On propage l'erreur aux voisins (selon les fractions de Floyd-Steinberg)
+                if j + 1 < colonnes:
+                    matrice[i, j + 1] += erreur * (7 / 16)
+                if i + 1 < lignes:
+                    if j - 1 >= 0:
+                        matrice[i + 1, j - 1] += erreur * (3 / 16)
+                    matrice[i + 1, j] += erreur * (5 / 16)
+                    if j + 1 < colonnes:
+                        matrice[i + 1, j + 1] += erreur * (1 / 16)
+    else:
+        matrice = np.round(matrice)
+        
+    matrice_dominos = matrice.astype(int)
+    matrice_dominos = np.clip(matrice_dominos, 0, valeur_max)
+    
+    # CORRECTION DE L'EFFET NÉGATIF (Dominos blancs = fond blanc)
     matrice_dominos = valeur_max - matrice_dominos
     
     return matrice_dominos
@@ -61,7 +92,8 @@ def dessiner_mosaique(placements, lignes, colonnes, taille_case=40):
 
     def dessiner_points(x, y, valeur):
         marge = taille_case // 4
-        r = taille_case // 12 
+        # Le choix de l'utilisateur : // 10 pour l'équilibre parfait
+        r = taille_case // 10 
         cx, cy = x + taille_case//2, y + taille_case//2 
         
         pos = {
@@ -89,8 +121,8 @@ def dessiner_mosaique(placements, lignes, colonnes, taille_case=40):
             dessin.ellipse([px-r, py-r, px+r, py+r], fill="black")
 
     # Calcul de l'espacement et de l'arrondi
-    padding = max(1, taille_case // 15) # Espace entre les dominos
-    rayon_arrondi = taille_case // 5    # Pour les coins doux
+    padding = max(1, taille_case // 15) 
+    rayon_arrondi = taille_case // 5    
 
     for p in placements:
         i1, j1 = p["case1"]
@@ -109,18 +141,17 @@ def dessiner_mosaique(placements, lignes, colonnes, taille_case=40):
         x2_pad = x_max - padding
         y2_pad = y_max - padding
 
-        # On dessine le domino blanc avec des coins arrondis
+        # On dessine le domino avec des bordures fines (width=1)
         try:
-            dessin.rounded_rectangle([x1_pad, y1_pad, x2_pad, y2_pad], radius=rayon_arrondi, fill="white", outline="black", width=2)
+            dessin.rounded_rectangle([x1_pad, y1_pad, x2_pad, y2_pad], radius=rayon_arrondi, fill="white", outline="black", width=1)
         except AttributeError:
-            # Sécurité si une très vieille version de Pillow est installée
-            dessin.rectangle([x1_pad, y1_pad, x2_pad, y2_pad], fill="white", outline="black", width=2)
+            dessin.rectangle([x1_pad, y1_pad, x2_pad, y2_pad], fill="white", outline="black", width=1)
         
-        # La ligne de séparation au milieu (plus fine que la bordure globale)
+        # La ligne de séparation au milieu fine (width=1)
         if i1 == i2: # Domino horizontal
-            dessin.line([x2, y1_pad, x2, y2_pad], fill="black", width=2)
+            dessin.line([x2, y1_pad, x2, y2_pad], fill="black", width=1)
         else: # Domino vertical
-            dessin.line([x1_pad, y2, x2_pad, y2], fill="black", width=2)
+            dessin.line([x1_pad, y2, x2_pad, y2], fill="black", width=1)
 
         # On dessine les points par-dessus
         dessiner_points(x1, y1, v1)

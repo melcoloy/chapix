@@ -14,10 +14,10 @@ def generer_inventaire(type_jeu="double_six", nb_boites=1):
 
 def placer_dominos(matrice_valeurs, stock_dominos):
     """
-    Algorithme 100% garanti SANS TROUS :
+    Algorithme 100% garanti SANS TROUS avec PRIORITÉ CENTRALE :
     1. Pavage initial trivial (tout horizontal ou vertical).
     2. Optimisation par permutations 2x2 (Swapping) pour suivre les contours.
-    3. Remplissage glouton final avec l'inventaire.
+    3. Remplissage glouton en commençant par le CENTRE de l'image.
     """
     lignes, colonnes = matrice_valeurs.shape
     placements_slots = []
@@ -25,7 +25,6 @@ def placer_dominos(matrice_valeurs, stock_dominos):
     
     # --- ETAPE 1 : Pavage de base (Zéro trou garanti) ---
     idx = 0
-    # On sait que la surface cible est paire. Soit colonnes est pair, soit lignes est pair.
     if colonnes % 2 == 0:
         for i in range(lignes):
             for j in range(0, colonnes, 2):
@@ -60,7 +59,6 @@ def placer_dominos(matrice_valeurs, stock_dominos):
                     v_hg, v_hd = matrice_valeurs[i, j], matrice_valeurs[i, j+1]
                     v_bg, v_bd = matrice_valeurs[i+1, j], matrice_valeurs[i+1, j+1]
                     
-                    # On veut que les pixels sous un même domino soient de couleur similaire
                     diff_H = abs(v_hg - v_hd) + abs(v_bg - v_bd)
                     diff_V = abs(v_hg - v_bg) + abs(v_hd - v_bd)
                     
@@ -90,10 +88,25 @@ def placer_dominos(matrice_valeurs, stock_dominos):
                         grille_slots[i+1, j+1] = idx2
                         amelioration = True
 
-    # --- ETAPE 3 : Assignation gloutonne du stock ---
+    # --- ETAPE 3 : Assignation gloutonne du stock (CENTRE D'ABORD) ---
     placements = []
     stock_restant = stock_dominos.copy()
     
+    # 1. On calcule les coordonnées du centre de l'image
+    centre_i = lignes / 2.0
+    centre_j = colonnes / 2.0
+    
+    # 2. Fonction mathématique pour calculer la distance d'un slot au centre
+    def distance_au_centre(slot):
+        c1, c2 = slot
+        milieu_i = (c1[0] + c2[0]) / 2.0
+        milieu_j = (c1[1] + c2[1]) / 2.0
+        return (milieu_i - centre_i)**2 + (milieu_j - centre_j)**2
+
+    # 3. La magie : on trie tous les emplacements du centre vers les bords !
+    placements_slots.sort(key=distance_au_centre)
+    
+    # 4. On distribue les dominos (le centre recevra les meilleures pièces)
     for slot in placements_slots:
         c1, c2 = slot
         val1 = matrice_valeurs[c1[0], c1[1]]
@@ -116,6 +129,8 @@ def placer_dominos(matrice_valeurs, stock_dominos):
                 inv = (err_inv < err_norm)
                 
         domino_choisi = stock_restant.pop(meilleur_idx)
+        
+        # Inversion du domino si cela permet une meilleure correspondance
         if inv:
             domino_choisi = (domino_choisi[1], domino_choisi[0])
             
