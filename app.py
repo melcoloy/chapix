@@ -5,6 +5,7 @@ import time
 import algorithme
 import hongrois_v1
 import traitement_image
+import app_v2
 import base64
 import streamlit.components.v1 as components
 
@@ -14,22 +15,24 @@ st.write("Projet P4 - Par Matteo Hanon Obsomer & Clément Leroy")
 
 # --- Barre latérale (Paramètres) ---
 st.sidebar.header("Paramètres")
-type_jeu = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"))
+type_jeu = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"), key="radio_type_jeu_main")
 nb_boites = st.sidebar.number_input("Nombre de boîtes", min_value=1, value=10, step=1)
+largeur_grille = st.sidebar.slider("Largeur (en nombre de dominos)", min_value=60, max_value=160, step=10, key="slider_largeur")
 
-# Options avancées
+""" # Options avancées
 st.sidebar.markdown("---")
 st.sidebar.subheader("Options avancées")
-
+ """
 # Case à cocher pour la segmentation
 activer_contours = st.sidebar.checkbox("Activer la segmentation (Renforcer les contours)")
 
 # dithering
 activer_dithering = st.sidebar.checkbox("Activer le Dithering (Algorithme Floyd-Steinberg)", value=True)
+
 # Choix de l'algorithme
 choix_algo = st.sidebar.radio(
     "Choix de l'algorithme :", 
-    ("Glouton (Rapide, par le centre)", "Hongrois (Lent, optimum mathématique)")
+    ("Glouton (Rapide, par le centre)", "Hongrois (Lent, optimum mathématique)", "Méta-Heuristique (Aléatoire)","Hongrois (Matteo)"),key="radio_algo_main"
 )
 
 btn_generer = st.sidebar.button("Générer la mosaïque")
@@ -40,8 +43,8 @@ col1, col2 = st.columns(2)
 with col1:
     st.header("Image originale")
     
-    # --- NOUVEAUTÉ : Choix de la source de l'image ---
-    choix_source = st.radio("Source de l'image :", ["📁 Importer un fichier", "📸 Prendre une photo"])
+    # Choix de la source de l'image
+    choix_source = st.radio("Source de l'image :", ["📁 Importer un fichier", "📸 Prendre une photo"], key="radio_source_main")
     
     fichier_upload = None
     
@@ -64,6 +67,16 @@ with col2:
             # 1. Génération du stock
             stock_dominos = algorithme.generer_inventaire(type_jeu, nb_boites)
             total_dominos = len(stock_dominos)
+
+            #Matteo
+            largeur_px, hauteur_px = image_originale.size
+            ratio = hauteur_px / largeur_px
+            hauteur_grille = int(largeur_grille * ratio)
+            nb_dominos = (largeur_grille * hauteur_grille) // 2
+            image_fin = app_v2.transfo_image(image_originale, largeur_grille, hauteur_grille)
+            matrice = app_v2.valeurs_grille(image_fin, type_jeu)
+            inventaire = app_v2.generer_inventaire(nb_dominos, type_jeu,matrice)
+            emplacements = app_v2.generer_emplacements(largeur_grille, hauteur_grille)
             
             # 2. Prétraitement de l'image
             try:
@@ -80,15 +93,39 @@ with col2:
             
             # 4. Lancement de l'algorithme choisi avec CHRONOMÈTRE
             heure_debut = time.time() 
+            my_bar = st.progress(0, text="Optimisation des pièces en cours...")
+            
+            # --- NOUVEAU : On garde une trace de la matrice utilisée ---
+            matrice_reference = matrice_valeurs 
             
             if choix_algo == "Glouton (Rapide, par le centre)":
                 placements = algorithme.placer_dominos(matrice_valeurs, stock_dominos)
+                
+            elif choix_algo == "Méta-Heuristique (Aléatoire)":
+                placements_bruts = app_v2.optimiser_placement_recuit(matrice, emplacements, inventaire, iterations=150000, st_progress_bar=my_bar)
+                matrice_reference = matrice # On utilisera cette matrice pour le score !
+                
+            elif choix_algo == "Hongrois (Matteo)":
+                placements_bruts = app_v2.optimiser_placement_hongrois(matrice, emplacements, inventaire, st_progress_bar=my_bar)
+                matrice_reference = matrice # On utilisera cette matrice pour le score !
+                
             else:
                 placements = hongrois_v1.placer_dominos(matrice_valeurs, stock_dominos)
                 
             heure_fin = time.time()
             temps_execution = heure_fin - heure_debut 
-                
+            
+            # --- CORRECTION VITALE : Conversion des Tuples V2 en Dictionnaires universels ---
+            if choix_algo in ["Méta-Heuristique (Aléatoire)", "Hongrois (Matteo)"]:
+                placements = []
+                for idx, (val1, val2) in enumerate(placements_bruts):
+                    (x1, y1), (x2, y2) = emplacements[idx]
+                    placements.append({
+                        "case1": (y1, x1), # On inverse x et y pour correspondre à (ligne, colonne)
+                        "case2": (y2, x2),
+                        "valeurs": (val1, val2)
+                    })
+                    
             st.success(f"🎉 Succès ! L'algorithme a placé {len(placements)} dominos (soit 100% du stock) !")
             
             # --- CALCUL DU SCORE DE FIDÉLITÉ ---
@@ -97,11 +134,13 @@ with col2:
                 i1, j1 = p["case1"]
                 i2, j2 = p["case2"]
                 v1, v2 = p["valeurs"]
-                erreur_totale += abs(matrice_valeurs[i1, j1] - v1)
-                erreur_totale += abs(matrice_valeurs[i2, j2] - v2)
+                
+                # On utilise matrice_reference (qui s'adapte à l'algo choisi) au lieu de matrice_valeurs
+                erreur_totale += abs(matrice_reference[i1, j1] - v1)
+                erreur_totale += abs(matrice_reference[i2, j2] - v2)
             
             valeur_max = 6 if type_jeu == "double_six" else 9
-            nb_pixels = matrice_valeurs.size
+            nb_pixels = matrice_reference.size
             score_fidelite = 100 * (1 - (erreur_totale / (nb_pixels * valeur_max)))
 
             # --- AFFICHAGE DES MÉTRIQUES ---
@@ -120,7 +159,7 @@ with col2:
             
             # 5. Dessin final de la mosaïque
             st.subheader("🖼️ Votre Mosaïque")
-            lignes, colonnes = matrice_valeurs.shape
+            lignes, colonnes = matrice_reference.shape
             image_mosaique = traitement_image.dessiner_mosaique(placements, lignes, colonnes)
             
             st.image(image_mosaique, caption="Mosaïque générée avec succès !", use_container_width=True)
@@ -129,7 +168,7 @@ with col2:
             # 6. Preuve d'inventaire
             st.divider()
             st.subheader("📊 Rapport d'inventaire")
-            st.write("Vérification stricte des pièces utilisées (doit correspondre au nombre de boîtes) :")
+            st.write("Vérification stricte des pièces utilisées :")
 
             inventaire_utilise = {}
             for placement in placements:

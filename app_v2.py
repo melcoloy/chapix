@@ -116,7 +116,7 @@ def calculer_erreur(domino, cible1, cible2):
     err_inv = abs(domino[1] - cible1) + abs(domino[0] - cible2)
     return (err_norm, domino) if err_norm <= err_inv else (err_inv, (domino[1], domino[0]))
 
-def optimiser_placement_recuit(cibles, emplacements, inventaire, iterations=1e7, st_progress_bar=None):
+def optimiser_placement_recuit(cibles, emplacements, inventaire, iterations=1e9, st_progress_bar=None):
     random.shuffle(inventaire)
     placement_actuel = list(inventaire)
     
@@ -260,7 +260,7 @@ def creer_mosaique_finale(emplacements, placement_final, colonnes, lignes, taill
 # ======================
 # 3. INTERFACE STREAMLIT
 # ======================
-st.set_page_config(page_title="Mosaïque de dominos", layout="wide")
+""" st.set_page_config(page_title="Mosaïque de dominos", layout="wide")
 st.title("🎲 Générateur de Mosaïque en Dominos")
 st.write("Projet P4 - Par Matteo Hanon Obsomer & Clément Leroy")
 
@@ -368,4 +368,4 @@ with col2:
         df_inventaire = df_inventaire.sort_values(by="Type de domino").reset_index(drop=True)
         st.dataframe(df_inventaire, width='stretch')
 
-        
+         """
