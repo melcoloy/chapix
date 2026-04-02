@@ -19,15 +19,6 @@ type_jeu = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"), key=
 nb_boites = st.sidebar.number_input("Nombre de boîtes", min_value=1, value=10, step=1)
 largeur_grille = st.sidebar.slider("Largeur (en nombre de dominos)", min_value=60, max_value=160, step=10, key="slider_largeur")
 
-""" # Options avancées
-st.sidebar.markdown("---")
-st.sidebar.subheader("Options avancées")
- """
-# Case à cocher pour la segmentation
-activer_contours = st.sidebar.checkbox("Activer la segmentation (Renforcer les contours)")
-
-# dithering
-activer_dithering = st.sidebar.checkbox("Activer le Dithering (Algorithme Floyd-Steinberg)", value=True)
 
 # Choix de l'algorithme
 choix_algo = st.sidebar.radio(
@@ -79,12 +70,8 @@ with col2:
             emplacements = app_v2.generer_emplacements(largeur_grille, hauteur_grille)
             
             # 2. Prétraitement de l'image
-            try:
-                # On essaie d'utiliser la fonction avec l'option des contours
-                image_prete = traitement_image.preparer_image(image_originale, total_dominos, activer_contours)
-            except TypeError:
-                # Sécurité
-                image_prete = traitement_image.preparer_image(image_originale, total_dominos)
+            
+            image_prete = traitement_image.preparer_image(image_originale, total_dominos)
                 
             st.image(image_prete, caption=f"Image N&B ajustée ({image_prete.width}x{image_prete.height} px)", width=400)
             
@@ -178,7 +165,7 @@ with col2:
 
             inventaire_trie = dict(sorted(inventaire_utilise.items()))
 
-            col_tab, col_vide = st.columns([1, 2])
+            col_tab, col_vide = st.columns([1.5, 2])
             with col_tab:
                 st.dataframe(inventaire_trie, column_config={
                     "index": "Type de domino",
