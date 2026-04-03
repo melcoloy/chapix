@@ -1,13 +1,171 @@
 import streamlit as st
-from PIL import Image 
+import numpy as np
+from PIL import Image, ImageOps, ImageFilter, ImageChops
+import random
+import math
 import io
 import time
+import base64
+import pandas as pd
+import streamlit.components.v1 as components
+from scipy.optimize import linear_sum_assignment
+
+# --- Imports des autres modules du projet ---
 import algorithme
 import hongrois_v1
 import traitement_image
-import app_v2
-import base64
-import streamlit.components.v1 as components
+
+
+# =====================================================================
+# 1. FONCTIONS MATHÉMATIQUES ET ALGORITHMES (Anciennement app_v2.py)
+# =====================================================================
+
+def transfo_image(image, colonnes, lignes):
+    image = image.convert("L")
+    image = ImageOps.fit(image, (colonnes, lignes), method=Image.Resampling.LANCZOS)
+    return image
+
+def valeurs_grille(image, type_jeu="double_six"):
+    val_max = 6 if type_jeu == "double_six" else 9
+    matrice_pixels = np.array(image)
+    # Inversion pour dominos blancs (pixel blanc 255 -> 0 point / pixel noir 0 -> 6 points)
+    matrice_valeurs = np.round((matrice_pixels / 255.0) * val_max).astype(int)
+    matrice_valeurs = val_max - matrice_valeurs 
+    return matrice_valeurs
+
+def generer_inventaire_v2(nb_dominos_necessaires, type_jeu="double_six", matrice_cibles=None):
+    val_max = 6 if type_jeu == "double_six" else 9
+    jeu_de_base = [(i, j) for i in range(val_max + 1) for j in range(i, val_max + 1)]
+    taille_jeu = len(jeu_de_base)
+    nb_jeux_complets = nb_dominos_necessaires // taille_jeu
+    reste = nb_dominos_necessaires % taille_jeu
+
+    inventaire_final = []
+    for _ in range(nb_jeux_complets):
+        inventaire_final.extend(jeu_de_base)
+        
+    if reste > 0:
+        if matrice_cibles is not None:
+            # --- MÉTHODE INTELLIGENTE ---
+            valeurs, clics = np.unique(matrice_cibles, return_counts=True)
+            frequences = dict(zip(valeurs, clics))
+            
+            dominos_scores = []
+            for domino in jeu_de_base:
+                score = frequences.get(domino[0], 0) + frequences.get(domino[1], 0)
+                dominos_scores.append((score, domino))
+                
+            dominos_scores.sort(key=lambda x: x[0], reverse=True)
+            pieces_restantes = [domino for score, domino in dominos_scores[:reste]]
+            inventaire_final.extend(pieces_restantes)
+        else:
+            inventaire_final.extend(random.sample(jeu_de_base, reste))
+            
+    return inventaire_final
+
+def generer_emplacements(largeur_grille, hauteur_grille):
+    grille_occupee = [[False] * largeur_grille for _ in range(hauteur_grille)]
+    emplacements = []
+    
+    for y in range(hauteur_grille):
+        for x in range(largeur_grille):
+            if grille_occupee[y][x]: continue
+                
+            if x + 1 < largeur_grille and not grille_occupee[y][x + 1]:
+                emplacements.append(((x, y), (x + 1, y)))
+                grille_occupee[y][x] = grille_occupee[y][x + 1] = True
+            elif y + 1 < hauteur_grille and not grille_occupee[y + 1][x]:
+                emplacements.append(((x, y), (x, y + 1)))
+                grille_occupee[y][x] = grille_occupee[y + 1][x] = True
+    return emplacements
+
+def calculer_erreur(domino, cible1, cible2):
+    err_norm = abs(domino[0] - cible1) + abs(domino[1] - cible2)
+    err_inv = abs(domino[1] - cible1) + abs(domino[0] - cible2)
+    return (err_norm, domino) if err_norm <= err_inv else (err_inv, (domino[1], domino[0]))
+
+def optimiser_placement_recuit(cibles, emplacements, inventaire, iterations=1e9, st_progress_bar=None):
+    random.shuffle(inventaire)
+    placement_actuel = list(inventaire)
+    
+    temp_initiale = 10.0
+    temp_finale = 0.01
+    alpha = (temp_finale / temp_initiale) ** (1 / iterations)
+    temperature = temp_initiale
+    
+    step_progress = iterations // 20 
+    
+    for i in range(int(iterations)):
+        idx1, idx2 = random.sample(range(len(emplacements)), 2)
+        (x1A, y1A), (x1B, y1B) = emplacements[idx1]
+        (x2A, y2A), (x2B, y2B) = emplacements[idx2]
+        
+        c1A, c1B = cibles[y1A, x1A], cibles[y1B, x1B]
+        c2A, c2B = cibles[y2A, x2A], cibles[y2B, x2B]
+        
+        err1_av, _ = calculer_erreur(placement_actuel[idx1], c1A, c1B)
+        err2_av, _ = calculer_erreur(placement_actuel[idx2], c2A, c2B)
+        err1_ap, _ = calculer_erreur(placement_actuel[idx2], c1A, c1B)
+        err2_ap, _ = calculer_erreur(placement_actuel[idx1], c2A, c2B)
+        
+        delta_erreur = (err1_ap + err2_ap) - (err1_av + err2_av)
+        
+        if delta_erreur < 0 or random.random() < math.exp(-delta_erreur / temperature):
+            placement_actuel[idx1], placement_actuel[idx2] = placement_actuel[idx2], placement_actuel[idx1]
+            
+        temperature *= alpha
+        
+        if st_progress_bar and i % step_progress == 0:
+            st_progress_bar.progress(i / iterations, text="Optimisation des pièces en cours...")
+
+    placement_final = [calculer_erreur(dom, cibles[empl[0][1], empl[0][0]], cibles[empl[1][1], empl[1][0]])[1] 
+                       for dom, empl in zip(placement_actuel, emplacements)]
+    
+    if st_progress_bar: st_progress_bar.empty()
+    return placement_final
+
+def optimiser_placement_hongrois(cibles, emplacements, inventaire, st_progress_bar=None):
+    nb_emplacements = len(emplacements)
+    
+    if st_progress_bar:
+        st_progress_bar.progress(0.1, text="Étape 1 : Calcul de la matrice des coûts (Peut prendre quelques secondes)...")
+        
+    matrice_couts = np.zeros((nb_emplacements, nb_emplacements), dtype=int)
+    valeurs_cibles = [(cibles[y1, x1], cibles[y2, x2]) for ((x1, y1), (x2, y2)) in emplacements]
+    
+    for i, (cible1, cible2) in enumerate(valeurs_cibles):
+        for j, domino in enumerate(inventaire):
+            err_norm = abs(domino[0] - cible1) + abs(domino[1] - cible2)
+            err_inv = abs(domino[1] - cible1) + abs(domino[0] - cible2)
+            matrice_couts[i, j] = err_norm if err_norm < err_inv else err_inv
+
+    if st_progress_bar:
+        st_progress_bar.progress(0.5, text="Étape 2/2 : Résolution mathématique exacte...")
+
+    row_ind, col_ind = linear_sum_assignment(matrice_couts)
+    
+    placement_final = []
+    for i, j in enumerate(col_ind): 
+        domino = inventaire[j]
+        cible1, cible2 = valeurs_cibles[i]
+        
+        err_norm = abs(domino[0] - cible1) + abs(domino[1] - cible2)
+        err_inv = abs(domino[1] - cible1) + abs(domino[0] - cible2)
+        
+        if err_norm <= err_inv:
+            placement_final.append(domino)
+        else:
+            placement_final.append((domino[1], domino[0]))
+            
+    if st_progress_bar: 
+        st_progress_bar.empty()
+        
+    return placement_final
+
+
+# =====================================================================
+# 2. INTERFACE STREAMLIT
+# =====================================================================
 
 st.set_page_config(page_title="Mosaïque de dominos", layout="wide")
 st.title("🎲 Générateur de Mosaïque en Dominos")
@@ -18,7 +176,6 @@ st.sidebar.header("Paramètres")
 type_jeu = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"), key="radio_type_jeu_main")
 nb_boites = st.sidebar.number_input("Nombre de boîtes", min_value=1, value=10, step=1)
 largeur_grille = st.sidebar.slider("Largeur (en nombre de dominos)", min_value=60, max_value=160, step=10, key="slider_largeur")
-
 
 # Choix de l'algorithme
 choix_algo = st.sidebar.radio(
@@ -34,7 +191,6 @@ col1, col2 = st.columns(2)
 with col1:
     st.header("Image originale")
     
-    # Choix de la source de l'image
     choix_source = st.radio("Source de l'image :", ["📁 Importer un fichier", "📸 Prendre une photo"], key="radio_source_main")
     
     fichier_upload = None
@@ -42,7 +198,6 @@ with col1:
     if choix_source == "📁 Importer un fichier":
         fichier_upload = st.file_uploader("Chargez votre image (JPG, PNG)", type=["jpg", "jpeg", "png"])
     else:
-        # Streamlit gère nativement l'accès à la webcam !
         fichier_upload = st.camera_input("Prenez une photo avec votre webcam")
     
     if fichier_upload is not None:
@@ -55,24 +210,24 @@ with col2:
     
     if fichier_upload is not None and btn_generer:
         with st.spinner("Calculs et assemblage en cours..."):
+            
             # 1. Génération du stock
             stock_dominos = algorithme.generer_inventaire(type_jeu, nb_boites)
             total_dominos = len(stock_dominos)
 
-            #Matteo
+            # Variables communes et Matteo
             largeur_px, hauteur_px = image_originale.size
             ratio = hauteur_px / largeur_px
             hauteur_grille = int(largeur_grille * ratio)
             nb_dominos = (largeur_grille * hauteur_grille) // 2
-            image_fin = app_v2.transfo_image(image_originale, largeur_grille, hauteur_grille)
-            matrice = app_v2.valeurs_grille(image_fin, type_jeu)
-            inventaire = app_v2.generer_inventaire(nb_dominos, type_jeu,matrice)
-            emplacements = app_v2.generer_emplacements(largeur_grille, hauteur_grille)
+            
+            image_fin = transfo_image(image_originale, largeur_grille, hauteur_grille)
+            matrice = valeurs_grille(image_fin, type_jeu)
+            inventaire = generer_inventaire_v2(nb_dominos, type_jeu, matrice)
+            emplacements = generer_emplacements(largeur_grille, hauteur_grille)
             
             # 2. Prétraitement de l'image
-            
             image_prete = traitement_image.preparer_image(image_originale, total_dominos)
-                
             st.image(image_prete, caption=f"Image N&B ajustée ({image_prete.width}x{image_prete.height} px)", width=400)
             
             # 3. Conversion en matrice mathématique
@@ -82,19 +237,19 @@ with col2:
             heure_debut = time.time() 
             my_bar = st.progress(0, text="Optimisation des pièces en cours...")
             
-            # --- NOUVEAU : On garde une trace de la matrice utilisée ---
+            # On garde une trace de la matrice utilisée
             matrice_reference = matrice_valeurs 
             
             if choix_algo == "Glouton (Rapide, par le centre)":
                 placements = algorithme.placer_dominos(matrice_valeurs, stock_dominos)
                 
             elif choix_algo == "Méta-Heuristique (Aléatoire)":
-                placements_bruts = app_v2.optimiser_placement_recuit(matrice, emplacements, inventaire, iterations=150000, st_progress_bar=my_bar)
-                matrice_reference = matrice # On utilisera cette matrice pour le score !
+                placements_bruts = optimiser_placement_recuit(matrice, emplacements, inventaire, iterations=150000, st_progress_bar=my_bar)
+                matrice_reference = matrice 
                 
             elif choix_algo == "Hongrois (Matteo)":
-                placements_bruts = app_v2.optimiser_placement_hongrois(matrice, emplacements, inventaire, st_progress_bar=my_bar)
-                matrice_reference = matrice # On utilisera cette matrice pour le score !
+                placements_bruts = optimiser_placement_hongrois(matrice, emplacements, inventaire, st_progress_bar=my_bar)
+                matrice_reference = matrice 
                 
             else:
                 placements = hongrois_v1.placer_dominos(matrice_valeurs, stock_dominos)
@@ -108,7 +263,7 @@ with col2:
                 for idx, (val1, val2) in enumerate(placements_bruts):
                     (x1, y1), (x2, y2) = emplacements[idx]
                     placements.append({
-                        "case1": (y1, x1), # On inverse x et y pour correspondre à (ligne, colonne)
+                        "case1": (y1, x1), 
                         "case2": (y2, x2),
                         "valeurs": (val1, val2)
                     })
@@ -122,7 +277,6 @@ with col2:
                 i2, j2 = p["case2"]
                 v1, v2 = p["valeurs"]
                 
-                # On utilise matrice_reference (qui s'adapte à l'algo choisi) au lieu de matrice_valeurs
                 erreur_totale += abs(matrice_reference[i1, j1] - v1)
                 erreur_totale += abs(matrice_reference[i2, j2] - v2)
             
@@ -192,15 +346,13 @@ with col2:
                 mime="image/png"
             )
 
-            # bouton d'impression (injection via html/js)
+            # 8. Impression (injection via html/js)
             st.divider()
             st.subheader("🖨️ Impression")
             st.write("Vous pouvez imprimer directement votre mosaïque depuis votre navigateur :")
 
-            # encondage de l'image en texte  (base64) pour pouvoir l'envoyer au navigateur html
             b64_image = base64.b64encode(donnees_image).decode()
 
-            # code html et JavaScript du bouton d'impression
             html_bouton = f"""
             <div style="text-align: left;">
                 <button onclick="
@@ -216,5 +368,4 @@ with col2:
                 </button>
             </div>
             """
-            # affichage du bouton dans Streamlit
             components.html(html_bouton, height=60)
