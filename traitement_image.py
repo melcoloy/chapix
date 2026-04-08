@@ -158,3 +158,34 @@ def dessiner_mosaique(placements, lignes, colonnes, taille_case=40):
         dessiner_points(x2, y2, v2)
 
     return image_finale
+
+def mettre_en_evidence(image_base, placements, colonnes, domino_cible):
+    """Dessine un cadre rouge autour des dominos ciblés en s'adaptant parfaitement à l'échelle."""
+    from PIL import ImageDraw
+    
+    img_out = image_base.copy()
+    draw = ImageDraw.Draw(img_out)
+    
+    taille_case = image_base.width // colonnes
+    epaisseur = max(4, taille_case // 15) 
+    
+    c1, c2 = domino_cible
+    
+    for p in placements:
+        v1, v2 = p["valeurs"]
+        if min(v1, v2) == min(c1, c2) and max(v1, v2) == max(c1, c2):
+            i1, j1 = p["case1"] 
+            i2, j2 = p["case2"]
+            
+            x_min = min(j1, j2) * taille_case
+            y_min = min(i1, i2) * taille_case
+            x_max = max(j1, j2) * taille_case + taille_case
+            y_max = max(i1, i2) * taille_case + taille_case
+            
+            draw.rectangle(
+                [x_min + epaisseur, y_min + epaisseur, x_max - epaisseur, y_max - epaisseur], 
+                outline="#FF0044", 
+                width=epaisseur
+            )
+            
+    return img_out

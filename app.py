@@ -169,12 +169,12 @@ def optimiser_placement_hongrois(cibles, emplacements, inventaire, st_progress_b
 
 st.set_page_config(page_title="Mosaïque de dominos", layout="wide")
 st.title("🎲 Générateur de Mosaïque en Dominos")
-st.write("Projet P4 - Par Matteo Hanon Obsomer & Clément Leroy")
+st.write("Par Matteo Hanon Obsomer & Clément Leroy")
 
 # --- Barre latérale (Paramètres) ---
 st.sidebar.header("Paramètres")
 type_jeu = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"), key="radio_type_jeu_main")
-nb_boites = st.sidebar.number_input("Nombre de boîtes", min_value=1, value=10, step=1)
+nb_boites = st.sidebar.number_input("Nombre de boîtes", min_value=10, value=50, step=10)
 largeur_grille = st.sidebar.slider("Largeur (en nombre de dominos)", min_value=60, max_value=160, step=10, key="slider_largeur")
 
 # Choix de l'algorithme
@@ -228,7 +228,7 @@ with col2:
             
             # 2. Prétraitement de l'image
             image_prete = traitement_image.preparer_image(image_originale, total_dominos)
-            st.image(image_prete, caption=f"Image N&B ajustée ({image_prete.width}x{image_prete.height} px)", width=400)
+            #st.image(image_prete, caption=f"Image N&B ajustée ({image_prete.width}x{image_prete.height} px)", width=400)
             
             # 3. Conversion en matrice mathématique
             matrice_valeurs = traitement_image.image_vers_matrice(image_prete, type_jeu)
@@ -284,25 +284,10 @@ with col2:
             nb_pixels = matrice_reference.size
             score_fidelite = 100 * (1 - (erreur_totale / (nb_pixels * valeur_max)))
 
-            # --- AFFICHAGE DES MÉTRIQUES ---
-            col_met1, col_met2 = st.columns(2)
-            with col_met1:
-                st.metric(label="🎯 Score de fidélité", value=f"{score_fidelite:.2f} %")
-            with col_met2:
-                st.metric(label="⏱️ Temps d'exécution", value=f"{temps_execution:.3f} s")
-            
             # 5. Dessin final de la mosaïque
             st.subheader("🖼️ Votre Mosaïque")
             lignes, colonnes = matrice_reference.shape
             image_mosaique = traitement_image.dessiner_mosaique(placements, lignes, colonnes)
-            
-            st.image(image_mosaique, caption="Mosaïque générée avec succès !", use_container_width=True)
-            st.balloons() 
-
-            # 6. Preuve d'inventaire
-            st.divider()
-            st.subheader("📊 Rapport d'inventaire")
-            st.write("Vérification stricte des pièces utilisées :")
 
             inventaire_utilise = {}
             for placement in placements:
@@ -312,53 +297,95 @@ with col2:
 
             inventaire_trie = dict(sorted(inventaire_utilise.items()))
 
-            col_tab, col_vide = st.columns([1.5, 2])
-            with col_tab:
-                st.dataframe(inventaire_trie, column_config={
-                    "index": "Type de domino",
-                    "value": "Quantité placée"
-                })
+            st.session_state["cache_placements"] = placements
+            st.session_state["cache_image"] = image_mosaique
+            st.session_state["cache_inventaire"] = inventaire_trie
+            st.session_state["cache_score"] = score_fidelite
+            st.session_state["cache_temps"] = temps_execution
+            st.session_state["cache_colonnes"] = matrice_reference.shape[1]
 
-            # 7. Téléchargement personnalisé
-            st.divider()
-            st.subheader("💾 Téléchargement")
+    if "cache_image" in st.session_state:
+        
+        # 1. Affichage des métriques
+        col_met1, col_met2 = st.columns(2)
+        with col_met1:
+            st.metric(label="🎯 Score de fidélité", value=f"{st.session_state['cache_score']:.2f} %")
+        with col_met2:
+            st.metric(label="⏱️ Temps d'exécution", value=f"{st.session_state['cache_temps']:.3f} s")
             
-            nom_fichier = st.text_input("Nommez votre fichier :", value="ma_mosaique_dominos")
+        st.divider()
+        
+        # 2. LE NOUVEAU MENU D'INSPECTION VISUELLE
+        st.subheader("🔍 Inspecteur de dominos")
+        
+        # On crée la liste déroulante à partir de l'inventaire
+        liste_options = ["Afficher l'image normale"] + list(st.session_state["cache_inventaire"].keys())
+        choix_domino = st.selectbox("Mettre en évidence un type de domino :", liste_options)
+        
+        # On dessine la bonne image selon le choix
+        if choix_domino == "Afficher l'image normale":
+            image_a_afficher = st.session_state["cache_image"]
+        else:
+            # On transforme le texte "[2 | 5]" en chiffres mathématiques (2, 5)
+            valeurs = choix_domino.replace("[", "").replace("]", "").split("|")
+            c1, c2 = int(valeurs[0].strip()), int(valeurs[1].strip())
             
-            if not nom_fichier.endswith(".png"):
-                nom_fichier += ".png"
-
-            buf = io.BytesIO()
-            image_mosaique.save(buf, format="PNG")
-            donnees_image = buf.getvalue()
-            
-            st.download_button(
-                label=f"📥 Télécharger : {nom_fichier}",
-                data=donnees_image,
-                file_name=nom_fichier,
-                mime="image/png"
+            # On appelle ta nouvelle fonction de surbrillance
+            image_a_afficher = traitement_image.mettre_en_evidence(
+                st.session_state["cache_image"], 
+                st.session_state["cache_placements"], 
+                st.session_state["cache_colonnes"], # <--- L'échelle magique est ici
+                (c1, c2)
             )
+            
+        st.image(image_a_afficher, caption="Mosaïque (Vue dynamique)", use_container_width=True)
 
-            # 8. Impression (injection via html/js)
-            st.divider()
-            st.subheader("🖨️ Impression")
-            st.write("Vous pouvez imprimer directement votre mosaïque depuis votre navigateur :")
+        # 3. L'INVENTAIRE ET LE TÉLÉCHARGEMENT
+        st.divider()
+        st.subheader("📊 Rapport d'inventaire")
+        col_tab, col_vide = st.columns([1.5, 2])
+        with col_tab:
+            import pandas as pd
+            df_inv = pd.DataFrame(list(st.session_state["cache_inventaire"].items()), columns=["Domino", "Quantité"])
+            df_inv.set_index("Domino", inplace=True)
+            st.table(df_inv) # Utilisation de st.table pour tout voir d'un coup !
+            
+        st.divider()
+        st.subheader("💾 Téléchargement")
+        nom_fichier = st.text_input("Nommez votre fichier :", value="ma_mosaique_dominos")
+        if not nom_fichier.endswith(".png"): nom_fichier += ".png"
+        
+        buf = io.BytesIO()
+        # On sauvegarde "image_a_afficher" (ainsi, l'utilisateur peut télécharger l'image avec ou sans cadres rouges !)
+        image_a_afficher.save(buf, format="PNG") 
+        donnees_image = buf.getvalue()
+        st.download_button(
+            label=f"📥 Télécharger : {nom_fichier}",
+            data=buf.getvalue(),
+            file_name=nom_fichier,
+            mime="image/png"
+        )
 
-            b64_image = base64.b64encode(donnees_image).decode()
+        # 8. Impression (injection via html/js)
+        st.divider()
+        st.subheader("🖨️ Impression")
+        st.write("Vous pouvez imprimer directement votre mosaïque depuis votre navigateur :")
 
-            html_bouton = f"""
-            <div style="text-align: left;">
-                <button onclick="
-                    var w = window.open('');
-                    w.document.write('<html><head><title>Impression Mosaique</title></head><body style=\\'margin:0;display:flex;justify-content:center;align-items:center;height:100vh;\\'><img src=\\'data:image/png;base64,{b64_image}\\' style=\\'max-width:100%;max-height:100%;\\'></body></html>');
-                    w.document.close();
-                    w.focus();
-                    setTimeout(function() {{ w.print(); w.close(); }}, 500);
-                " style="background-color: #ffffff; color: #31333F; padding: 10px 24px; border: 1px solid #dcdcdc; border-radius: 8px; cursor: pointer; font-size: 16px; font-family: sans-serif; transition: 0.3s;"
-                onmouseover="this.style.borderColor='#FF4B4B'; this.style.color='#FF4B4B';"
-                onmouseout="this.style.borderColor='#dcdcdc'; this.style.color='#31333F';">
-                    🖨️ Lancer l'impression
-                </button>
-            </div>
-            """
-            components.html(html_bouton, height=60)
+        b64_image = base64.b64encode(donnees_image).decode()
+
+        html_bouton = f"""
+        <div style="text-align: left;">
+            <button onclick="
+                var w = window.open('');
+                w.document.write('<html><head><title>Impression Mosaique</title></head><body style=\\'margin:0;display:flex;justify-content:center;align-items:center;height:100vh;\\'><img src=\\'data:image/png;base64,{b64_image}\\' style=\\'max-width:100%;max-height:100%;\\'></body></html>');
+                w.document.close();
+                w.focus();
+                setTimeout(function() {{ w.print(); w.close(); }}, 500);
+            " style="background-color: #ffffff; color: #31333F; padding: 10px 24px; border: 1px solid #dcdcdc; border-radius: 8px; cursor: pointer; font-size: 16px; font-family: sans-serif; transition: 0.3s;"
+            onmouseover="this.style.borderColor='#FF4B4B'; this.style.color='#FF4B4B';"
+            onmouseout="this.style.borderColor='#dcdcdc'; this.style.color='#31333F';">
+                🖨️ Lancer l'impression
+            </button>
+        </div>
+        """
+        components.html(html_bouton, height=60)
