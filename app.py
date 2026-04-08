@@ -291,13 +291,6 @@ with col2:
             with col_met2:
                 st.metric(label="⏱️ Temps d'exécution", value=f"{temps_execution:.3f} s")
             
-            if score_fidelite > 90:
-                st.write("✨ *Excellent ! La ressemblance est quasi-parfaite.*")
-            elif score_fidelite > 75:
-                st.write("👍 *Bon résultat, les formes principales sont bien respectées.*")
-            else:
-                st.write("⚠️ *Le stock de dominos était peut-être trop limité pour cette image.*")
-            
             # 5. Dessin final de la mosaïque
             st.subheader("🖼️ Votre Mosaïque")
             lignes, colonnes = matrice_reference.shape
