@@ -42,8 +42,8 @@ kkbox/
 
 **1. Cloner le dépôt :**
 ```bash
-git clone https://github.com/melcoloy/kkbox.git
-cd kkbox
+git clone https://github.com/melcoloy/chapix.git
+cd chapix
 ```
 
 **2. Installer les dépendances :**
