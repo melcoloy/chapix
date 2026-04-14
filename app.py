@@ -150,7 +150,12 @@ with col2:
         st.success(f"🎉 {len(placements)} dominos placés !")
 
         # ── Inspecteur de dominos  ────────────────────
-        st.subheader("🔍 Inspecteur de dominos")
+        col_titre, col_boutons = st.columns([3.3, 1])
+        
+        with col_titre:
+            st.subheader("🔍 Inspecteur de dominos")
+        
+        # Impression et téléchargement
         # 1. On prépare l'image en arrière-plan
         buf = io.BytesIO()
         image_mosaique.save(buf, format="PNG")
@@ -160,7 +165,7 @@ with col2:
         html_boutons = f"""
         <div style="display: flex; gap: 10px; justify-content: flex-end; align-items: center; padding-right: 5px;">
             <a href="data:image/png;base64,{b64_image}" download="mosaique_dominos.png" title="Télécharger l'image"
-               style="display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; background: transparent; border: 1px solid #dcdcdc; border-radius: 8px; text-decoration: none; font-size: 20px; transition: 0.2s;"
+               style="display: flex; align-items: center; justify-content: center; width: 35px; height: 35px; background: transparent; border: 1px solid #dcdcdc; border-radius: 8px; text-decoration: none; font-size: 20px; transition: 0.2s;"
                onmouseover="this.style.borderColor='#FF4B4B'; this.style.backgroundColor='#FFF0F0';"
                onmouseout="this.style.borderColor='#dcdcdc'; this.style.backgroundColor='transparent';">
                💾
@@ -172,15 +177,15 @@ with col2:
                 w.document.close();
                 w.focus();
                 setTimeout(function() {{ w.print(); w.close(); }}, 500);
-            " style="display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; background: transparent; border: 1px solid #dcdcdc; border-radius: 8px; cursor: pointer; font-size: 20px; padding: 0; transition: 0.2s;"
+            " style="display: flex; align-items: center; justify-content: center; width: 35px; height: 35px; background: transparent; border: 1px solid #dcdcdc; border-radius: 8px; cursor: pointer; font-size: 20px; padding: 0; transition: 0.2s;"
                onmouseover="this.style.borderColor='#FF4B4B'; this.style.backgroundColor='#FFF0F0';"
                onmouseout="this.style.borderColor='#dcdcdc'; this.style.backgroundColor='transparent';">
                🖨️
             </button>
         </div>
         """
-        # On affiche la mini-barre (hauteur très fine de 45px)
-        components.html(html_boutons, height=50)
+        with col_boutons:
+            components.html(html_boutons, height=50)
 
         liste_options = ["Afficher l'image normale"] + list(inventaire.keys())
         choix_domino  = st.selectbox("Mettre en évidence un type de domino :", liste_options)
