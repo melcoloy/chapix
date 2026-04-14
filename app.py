@@ -15,13 +15,6 @@ from core.inventaire import generer_stock, completer_inventaire, valeur_max
 from core.image import preparer_image, image_vers_matrice, dessiner_mosaique, mettre_en_evidence
 from core.algorithmes import glouton, hongrois, recuit, calculer_score, LIMITE_HONGROIS
 
-# ── Import conditionnel ────────────────────────────────────────────────
-try:
-    from streamlit_image_coordinates import streamlit_image_coordinates
-    _CLIC_DISPONIBLE = True
-except ImportError:
-    _CLIC_DISPONIBLE = False
-
 # ── Algos disponibles ─────────────────────────────────────────────────
 ALGOS = {
     "Glouton (Rapide, par le centre)":       "glouton",
@@ -36,9 +29,6 @@ ALGOS = {
 st.set_page_config(page_title="Mosaïque de dominos", layout="wide")
 st.title("🎲 Générateur de Mosaïque en Dominos")
 st.write("Projet P4 — Matteo Hanon Obsomer & Clément Leroy")
-
-if not _CLIC_DISPONIBLE:
-    st.info("💡 Installez `streamlit-image-coordinates` pour activer le clic interactif sur la mosaïque.")
 
 # ── Barre latérale ────────────────────────────────────────────────────
 st.sidebar.header("Paramètres")
@@ -159,23 +149,38 @@ with col2:
 
         st.success(f"🎉 {len(placements)} dominos placés !")
 
-        # Métriques
-        score = calculer_score(placements, matrice_ref, vmax)
-        c1, c2 = st.columns(2)
-        c1.metric("🎯 Fidélité", f"{score:.2f} %")
-        c2.metric("⏱️ Durée", f"{temps:.3f} s")
-
-        if score > 90:
-            st.write("✨ *Excellent ! La ressemblance est quasi-parfaite.*")
-        elif score > 75:
-            st.write("👍 *Bon résultat, les formes principales sont bien respectées.*")
-        else:
-            st.write("⚠️ *Le stock était peut-être trop limité pour cette image.*")
-
-        st.divider()
-
         # ── Inspecteur de dominos  ────────────────────
         st.subheader("🔍 Inspecteur de dominos")
+        # 1. On prépare l'image en arrière-plan
+        buf = io.BytesIO()
+        image_mosaique.save(buf, format="PNG")
+        b64_image = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+        # 2. On crée deux petits boutons carrés alignés à droite
+        html_boutons = f"""
+        <div style="display: flex; gap: 10px; justify-content: flex-end; align-items: center; padding-right: 5px;">
+            <a href="data:image/png;base64,{b64_image}" download="mosaique_dominos.png" title="Télécharger l'image"
+               style="display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; background: transparent; border: 1px solid #dcdcdc; border-radius: 8px; text-decoration: none; font-size: 20px; transition: 0.2s;"
+               onmouseover="this.style.borderColor='#FF4B4B'; this.style.backgroundColor='#FFF0F0';"
+               onmouseout="this.style.borderColor='#dcdcdc'; this.style.backgroundColor='transparent';">
+               💾
+            </a>
+            
+            <button title="Imprimer l'image" onclick="
+                var w = window.open('');
+                w.document.write('<html><head><title>Impression</title></head><body style=\\'margin:0;display:flex;justify-content:center;align-items:center;height:100vh;\\'><img src=\\'data:image/png;base64,{b64_image}\\' style=\\'max-width:100%;max-height:100%;\\'></body></html>');
+                w.document.close();
+                w.focus();
+                setTimeout(function() {{ w.print(); w.close(); }}, 500);
+            " style="display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; background: transparent; border: 1px solid #dcdcdc; border-radius: 8px; cursor: pointer; font-size: 20px; padding: 0; transition: 0.2s;"
+               onmouseover="this.style.borderColor='#FF4B4B'; this.style.backgroundColor='#FFF0F0';"
+               onmouseout="this.style.borderColor='#dcdcdc'; this.style.backgroundColor='transparent';">
+               🖨️
+            </button>
+        </div>
+        """
+        # On affiche la mini-barre (hauteur très fine de 45px)
+        components.html(html_boutons, height=50)
 
         liste_options = ["Afficher l'image normale"] + list(inventaire.keys())
         choix_domino  = st.selectbox("Mettre en évidence un type de domino :", liste_options)
@@ -189,8 +194,16 @@ with col2:
 
         st.image(image_a_afficher, caption="Mosaïque", use_container_width=True)
 
-        # ── Rapport d'inventaire ───────────────────────────────────────
+        # Métriques
+        score = calculer_score(placements, matrice_ref, vmax)
+        c1, c2 = st.columns(2)
+        c1.metric("🎯 Fidélité", f"{score:.2f} %")
+        c2.metric("⏱️ Durée", f"{temps:.3f} s")
+
         st.divider()
+
+
+        # ── Rapport d'inventaire ───────────────────────────────────────
         st.subheader("📊 Rapport d'inventaire")
 
         col_tab, _ = st.columns([1.5, 2])
@@ -198,43 +211,6 @@ with col2:
             df_inv = pd.DataFrame(
                 list(inventaire.items()), columns=["Domino", "Quantité"]
             ).set_index("Domino")
-            st.table(df_inv)
+            st.dataframe(df_inv)
 
-        # ── Téléchargement ─────────────────────────────────────────────
-        st.divider()
-        st.subheader("💾 Téléchargement")
-        nom = st.text_input("Nom du fichier :", value="ma_mosaique_dominos")
-        if not nom.endswith(".png"):
-            nom += ".png"
-
-        buf = io.BytesIO()
-        image_a_afficher.save(buf, format="PNG")  # sauvegarde avec ou sans cadres rouges
-        donnees = buf.getvalue()
-
-        st.download_button(
-            label=f"📥 Télécharger : {nom}",
-            data=donnees,
-            file_name=nom,
-            mime="image/png",
-        )
-
-        # ── Impression ─────────────────────────────────────────────────
-        st.divider()
-        st.subheader("🖨️ Impression")
-        st.write("Vous pouvez imprimer directement votre mosaïque depuis votre navigateur :")
-
-        b64 = base64.b64encode(donnees).decode()
-        components.html(f"""
-        <div>
-            <button onclick="
-                var w=window.open('');
-                w.document.write('<html><body style=\\'margin:0;display:flex;justify-content:center;align-items:center;height:100vh;\\'><img src=\\'data:image/png;base64,{b64}\\' style=\\'max-width:100%;max-height:100%;\\'></body></html>');
-                w.document.close(); w.focus();
-                setTimeout(function(){{w.print();w.close();}},500);
-            " style="background:#fff;color:#31333F;padding:10px 24px;border:1px solid #dcdcdc;border-radius:8px;cursor:pointer;font-size:16px;font-family:sans-serif;"
-            onmouseover="this.style.borderColor='#FF4B4B';this.style.color='#FF4B4B';"
-            onmouseout="this.style.borderColor='#dcdcdc';this.style.color='#31333F';">
-                🖨️ Lancer l'impression
-            </button>
-        </div>
-        """, height=60)
+        
