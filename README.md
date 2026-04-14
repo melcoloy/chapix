@@ -46,12 +46,8 @@ git clone https://github.com/melcoloy/chapix.git
 cd chapix
 ```
 
-**2. Installer les dépendances :**
-```bash
-pip install streamlit Pillow numpy scipy streamlit-image-coordinates
-```
 
-**3. Lancer l'application :**
+**2. Lancer l'application :**
 ```bash
 py -m streamlit run app.py
 ```
