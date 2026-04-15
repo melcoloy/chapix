@@ -10,7 +10,7 @@ import time
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 from core.inventaire import generer_stock, completer_inventaire, valeur_max
 from core.image import preparer_image, image_vers_matrice, dessiner_mosaique, mettre_en_evidence
@@ -37,6 +37,13 @@ type_jeu       = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf")
 nb_boites      = st.sidebar.number_input("Nombre de boîtes disponibles", min_value=10, value=50, step=10)
 activer_contours  = st.sidebar.checkbox("Segmentation des contours")
 choix_algo     = st.sidebar.radio("Algorithme :", list(ALGOS.keys()), key="widget_algo")
+
+st.sidebar.divider()
+st.sidebar.subheader("🎚️ Retouche")
+luminosite = st.sidebar.slider("Luminosité", min_value=0.5, max_value=2.5, value=1.0, step=0.1)
+contraste = st.sidebar.slider("Contraste", min_value=0.5, max_value=3.0, value=1.0, step=0.1)
+
+st.sidebar.divider()
 btn_generer    = st.sidebar.button("Générer la mosaïque")
 
 # ── Colonnes principales ──────────────────────────────────────────────
@@ -51,9 +58,27 @@ with col1:
         else st.camera_input("Prendre une photo")
     )
     if fichier:
+        # Ouverture de l'image
         image_originale = Image.open(fichier)
-        st.image(image_originale, caption="Image importée", width=400)
-        st.success("Image chargée !")
+        
+        # --- NOUVEAUTÉ : APPLICATION DES RETOUCHES ---
+        if luminosite != 1.0:
+            image_originale = ImageEnhance.Brightness(image_originale).enhance(luminosite)
+        if contraste != 1.0:
+            image_originale = ImageEnhance.Contrast(image_originale).enhance(contraste)
+        # ---------------------------------------------
+        
+        st.image(image_originale, caption="Image importée (retouchée)", width=400)
+        
+        # --- APERÇU DIRECT EN TEMPS RÉEL (Que nous avons fait avant) ---
+        st.divider()
+        st.subheader("👁️ Aperçu de la grille N&B")
+        
+        stock = generer_stock(type_jeu, nb_boites)
+        image_prete = preparer_image(image_originale, len(stock), activer_contours)
+        
+        st.image(image_prete, caption=f"Dimensions : {image_prete.width} × {image_prete.height} cases", width=400)
+        st.info("💡 Modifiez le nombre de boîtes ou la case 'Contours' à gauche pour ajuster cet aperçu en temps réel. Lancez la génération quand le rendu vous plaît !")
 
 with col2:
     st.header("Résultat")

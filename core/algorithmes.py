@@ -318,11 +318,63 @@ def recuit(
 # Utilitaire : score de fidélité
 # ─────────────────────────────────────────────────────────────────────
 
-def calculer_score(placements: list[dict], matrice: np.ndarray, valeur_max: int) -> float:
-    """Retourne le score de fidélité en % (0–100)."""
-    erreur = sum(
-        abs(matrice[p["case1"][0], p["case1"][1]] - p["valeurs"][0]) +
-        abs(matrice[p["case2"][0], p["case2"][1]] - p["valeurs"][1])
-        for p in placements
-    )
-    return 100 * (1 - erreur / (matrice.size * valeur_max))
+def calculer_score(placements: list[dict], matrice_ref: np.ndarray, vmax: int) -> float:
+    """
+    Calcule la fidélité de la mosaïque en pondérant l'importance de chaque pixel.
+    - Les pixels au centre de l'image ont plus de poids.
+    - Les zones de fort contraste (contours) ont un poids massif.
+    """
+    if not placements:
+        return 0.0
+
+    lignes, colonnes = matrice_ref.shape
+
+    # 1. Création de la matrice de poids (importance de chaque case)
+    poids = np.ones((lignes, colonnes))
+
+    # A. Pondération radiale (Le centre est plus important)
+    centre_x, centre_y = colonnes / 2, lignes / 2
+    dist_max = np.sqrt(centre_x**2 + centre_y**2)
+    
+    for i in range(lignes):
+        for j in range(colonnes):
+            dist_centre = np.sqrt((j - centre_x)**2 + (i - centre_y)**2)
+            # Ajoute jusqu'à +1.0 de poids pour le centre exact
+            poids[i, j] += 1.0 - (dist_centre / dist_max)
+
+    # B. Pondération par les contours (Gradient de l'image)
+    # Calcule la variation de contraste en X et Y
+    gy, gx = np.gradient(matrice_ref)
+    gradient = np.sqrt(gx**2 + gy**2)
+    
+    if np.max(gradient) > 0:
+        # Les zones de très fort contraste reçoivent un bonus de poids de +3.0
+        gradient = (gradient / np.max(gradient)) * 3.0
+        
+    poids += gradient
+
+    # 2. Calcul des erreurs pondérées
+    erreur_totale = 0.0
+    poids_total_max = 0.0
+
+    for p in placements:
+        i1, j1 = p["case1"]
+        i2, j2 = p["case2"]
+        v1, v2 = p["valeurs"]
+
+        # Erreur pour la première moitié du domino
+        err1 = abs(matrice_ref[i1, j1] - v1)
+        erreur_totale += err1 * poids[i1, j1]
+        poids_total_max += vmax * poids[i1, j1]
+
+        # Erreur pour la seconde moitié du domino
+        err2 = abs(matrice_ref[i2, j2] - v2)
+        erreur_totale += err2 * poids[i2, j2]
+        poids_total_max += vmax * poids[i2, j2]
+
+    # 3. Calcul du pourcentage final
+    if poids_total_max == 0:
+        return 0.0
+        
+    score_final = 100.0 * (1.0 - (erreur_totale / poids_total_max))
+    return max(0.0, score_final)
