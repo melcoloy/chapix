@@ -4,6 +4,7 @@ Toute la logique métier est dans le package `core/`.
 """
 import io
 import base64
+import math
 import time
 
 import pandas as pd
@@ -17,9 +18,9 @@ from core.algorithmes import glouton, hongrois, recuit, calculer_score, LIMITE_H
 
 # ── Algos disponibles ─────────────────────────────────────────────────
 ALGOS = {
-    "Glouton (Rapide, par le centre)":       "glouton",
+    "Glouton (Par le centre)":       "glouton",
     "Hongrois (Lent, optimum mathématique)": "hongrois",
-    "Méta-Heuristique (Recuit simulé)":      "recuit",
+    "Méta-Heuristique (Très rapide)":      "recuit",
 }
 
 # =====================================================================
@@ -33,9 +34,8 @@ st.write("Projet P4 — Matteo Hanon Obsomer & Clément Leroy")
 # ── Barre latérale ────────────────────────────────────────────────────
 st.sidebar.header("Paramètres")
 type_jeu       = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"), key="widget_type_jeu")
-nb_boites      = st.sidebar.number_input("Nombre de boîtes", min_value=10, value=50, step=10)
+nb_boites      = st.sidebar.number_input("Nombre de boîtes disponibles", min_value=10, value=50, step=10)
 activer_contours  = st.sidebar.checkbox("Segmentation des contours")
-activer_dithering = st.sidebar.checkbox("Dithering Floyd-Steinberg", value=True)
 choix_algo     = st.sidebar.radio("Algorithme :", list(ALGOS.keys()), key="widget_algo")
 btn_generer    = st.sidebar.button("Générer la mosaïque")
 
@@ -63,26 +63,39 @@ with col2:
         try:
             with st.spinner("Calculs en cours..."):
 
-                # Stock
-                stock = generer_stock(type_jeu, nb_boites)
+                # 1. Calcul du stock maximum de cases
+                taille_boite = 28 if type_jeu == "double_six" else 55
+                stock_max_dominos = nb_boites * taille_boite
+                cases_max_dispo = stock_max_dominos * 2
+                
+                # 2. Analyse des proportions de l'image
+                largeur_px, hauteur_px = image_originale.size
+                ratio = hauteur_px / largeur_px
+                
+                # Calcul de la taille maximale possible
+                # On sait que : (largeur * (largeur * ratio)) ne doit pas dépasser cases_max_dispo
+                largeur_grille = int(math.sqrt(cases_max_dispo / ratio))
+                hauteur_grille = int(largeur_grille * ratio)
+                
+                # 4. Sécurité mathématique : forcer un nombre pair de cases (pour des pièces de 1x2)
+                if (largeur_grille * hauteur_grille) % 2 != 0:
+                    hauteur_grille -= 1
+                    
+                nb_dominos = (largeur_grille * hauteur_grille) // 2
                 vmax  = valeur_max(type_jeu)
 
                 # Prétraitement image
-                image_prete     = preparer_image(image_originale, len(stock), activer_contours)
-                matrice_valeurs = image_vers_matrice(image_prete, type_jeu, activer_dithering)
+                image_prete = preparer_image(image_originale, largeur_grille, hauteur_grille, activer_contours)
+                matrice_valeurs = image_vers_matrice(image_prete, type_jeu)
 
-                # Inventaire adapté à la grille
-                lignes_g   = image_prete.height
-                colonnes_g = image_prete.width
-                nb_emplacements = (lignes_g * colonnes_g) // 2
-                inventaire = completer_inventaire(nb_emplacements, type_jeu, matrice_valeurs)
+                inventaire = completer_inventaire(nb_dominos, type_jeu, matrice_valeurs)
 
                 # Garde-fou Hongrois
-                if ALGOS[choix_algo] == "hongrois" and nb_emplacements > LIMITE_HONGROIS:
+                if ALGOS[choix_algo] == "hongrois" and nb_dominos > LIMITE_HONGROIS:
                     st.error(
                         f"⚠️ Grille trop grande pour l'algorithme Hongrois "
-                        f"({nb_emplacements} emplacements > limite {LIMITE_HONGROIS}). "
-                        "Réduisez la largeur ou utilisez le Glouton."
+                        f"({nb_dominos} emplacements > limite {LIMITE_HONGROIS}). "
+                        "Réduisez le nombre de boîtes ou utilisez un autre algorithme."
                     )
                     st.stop()
 
@@ -95,7 +108,7 @@ with col2:
                 debut = time.time()
 
                 if ALGOS[choix_algo] == "glouton":
-                    placements = glouton(matrice_valeurs, stock)
+                    placements = glouton(matrice_valeurs, inventaire)
                     my_bar.empty()
                 elif ALGOS[choix_algo] == "hongrois":
                     placements = hongrois(matrice_valeurs, inventaire, progress_callback=progress)
@@ -105,7 +118,7 @@ with col2:
                 temps = time.time() - debut
 
                 # Dessin de base (sans surbrillance)
-                image_mosaique = dessiner_mosaique(placements, lignes_g, colonnes_g)
+                image_mosaique = dessiner_mosaique(placements, hauteur_grille, largeur_grille)
 
                 # Inventaire utilisé
                 inventaire_utilise = {}
@@ -120,7 +133,7 @@ with col2:
                     "matrice_reference": matrice_valeurs,
                     "image_mosaique":    image_mosaique,
                     "inventaire":        dict(sorted(inventaire_utilise.items())),
-                    "colonnes":          colonnes_g,
+                    "colonnes":          largeur_grille,
                     "temps":             temps,
                     "type_jeu":          type_jeu,
                     "vmax":              vmax,
@@ -163,7 +176,7 @@ with col2:
 
         # 2. On crée deux petits boutons carrés alignés à droite
         html_boutons = f"""
-        <div style="display: flex; gap: 10px; justify-content: flex-end; align-items: center; padding-right: 5px;">
+        <div style="display: flex; gap: 10px; justify-content: flex-end; align-items: center; margin-top: 15px;">
             <a href="data:image/png;base64,{b64_image}" download="mosaique_dominos.png" title="Télécharger l'image"
                style="display: flex; align-items: center; justify-content: center; width: 35px; height: 35px; background: transparent; border: 1px solid #dcdcdc; border-radius: 8px; text-decoration: none; font-size: 20px; transition: 0.2s;"
                onmouseover="this.style.borderColor='#FF4B4B'; this.style.backgroundColor='#FFF0F0';"
@@ -185,8 +198,9 @@ with col2:
         </div>
         """
         with col_boutons:
-            components.html(html_boutons, height=50)
+            components.html(html_boutons, height=55)
 
+        #Inspecteur de dominos
         liste_options = ["Afficher l'image normale"] + list(inventaire.keys())
         choix_domino  = st.selectbox("Mettre en évidence un type de domino :", liste_options)
 
@@ -197,7 +211,7 @@ with col2:
             d1, d2   = int(valeurs[0].strip()), int(valeurs[1].strip())
             image_a_afficher = mettre_en_evidence(image_mosaique, placements, colonnes_g, (d1, d2))
 
-        st.image(image_a_afficher, caption="Mosaïque", use_container_width=True)
+        st.image(image_a_afficher, caption="Mosaïque", width='stretch')
 
         # Métriques
         score = calculer_score(placements, matrice_ref, vmax)
@@ -217,5 +231,3 @@ with col2:
                 list(inventaire.items()), columns=["Domino", "Quantité"]
             ).set_index("Domino")
             st.dataframe(df_inv)
-
-        

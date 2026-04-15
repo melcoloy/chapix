@@ -22,49 +22,21 @@ _DISPOSITION_PIPS = {
 
 def preparer_image(
     image_originale: Image.Image,
-    total_dominos: int,
+    largeur: int,
+    hauteur: int,
     renforcer_contours: bool = False,
 ) -> Image.Image:
     """
-    Convertit l'image en niveaux de gris et la redimensionne pour couvrir
-    exactement total_dominos dominos (2 pixels par domino).
+    Convertit l'image en niveaux de gris.
     """
     if not isinstance(image_originale, Image.Image):
         raise TypeError(f"Attendu PIL.Image, reçu : {type(image_originale).__name__}")
-    if not isinstance(total_dominos, int) or total_dominos < 1:
-        raise ValueError(f"total_dominos doit être >= 1, reçu : {total_dominos!r}")
-
-    image_nb = ImageOps.autocontrast(image_originale.convert("L"))
+    image_redimensionnee = image_originale.resize((largeur, hauteur), Image.Resampling.LANCZOS)
+    image_nb = ImageOps.autocontrast(image_redimensionnee.convert("L"))
     if renforcer_contours:
         image_nb = image_nb.filter(ImageFilter.EDGE_ENHANCE_MORE)
 
-    largeur_orig, hauteur_orig = image_nb.size
-    if largeur_orig < _DIMENSION_MIN or hauteur_orig < _DIMENSION_MIN:
-        raise ValueError(f"Image trop petite ({largeur_orig}×{hauteur_orig} px).")
-
-    surface_cible = total_dominos * 2
-    ratio_cible = largeur_orig / hauteur_orig
-    meilleure_diff = float("inf")
-    nouvelle_largeur, nouvelle_hauteur = surface_cible, 1
-
-    for h in range(1, surface_cible + 1):
-        if surface_cible % h != 0:
-            continue
-        l = surface_cible // h
-        if l < _DIMENSION_MIN or h < _DIMENSION_MIN:
-            continue
-        diff = abs(l / h - ratio_cible)
-        if diff < meilleure_diff:
-            meilleure_diff = diff
-            nouvelle_largeur, nouvelle_hauteur = l, h
-
-    if nouvelle_hauteur < _DIMENSION_MIN or nouvelle_largeur < _DIMENSION_MIN:
-        raise ValueError(
-            f"Impossible de trouver des dimensions valides pour {total_dominos} dominos. "
-            "Augmentez le nombre de boîtes."
-        )
-
-    return image_nb.resize((nouvelle_largeur, nouvelle_hauteur))
+    return image_nb
 
 
 def image_vers_matrice(
