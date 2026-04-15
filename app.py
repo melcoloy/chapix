@@ -68,14 +68,33 @@ with col1:
             image_originale = ImageEnhance.Contrast(image_originale).enhance(contraste)
         # ---------------------------------------------
         
-        st.image(image_originale, caption="Image importée (retouchée)", width=400)
+        st.image(image_originale, caption="Image importée", width=400)
         
         # --- APERÇU DIRECT EN TEMPS RÉEL (Que nous avons fait avant) ---
         st.divider()
         st.subheader("👁️ Aperçu de la grille N&B")
+
+        # 1. Calcul du stock maximum de cases
+        taille_boite = 28 if type_jeu == "double_six" else 55
+        stock_max_dominos = nb_boites * taille_boite
+        cases_max_dispo = stock_max_dominos * 2
+                
+        # 2. Analyse des proportions de l'image
+        largeur_px, hauteur_px = image_originale.size
+        ratio = hauteur_px / largeur_px
+                
+        # Calcul de la taille maximale possible
+        # On sait que : (largeur * (largeur * ratio)) ne doit pas dépasser cases_max_dispo
+        largeur_grille = int(math.sqrt(cases_max_dispo / ratio))
+        hauteur_grille = int(largeur_grille * ratio)
+                
+        # 4. Sécurité mathématique : forcer un nombre pair de cases (pour des pièces de 1x2)
+        if (largeur_grille * hauteur_grille) % 2 != 0:
+            hauteur_grille -= 1
+                    
+        nb_dominos = (largeur_grille * hauteur_grille) // 2        
         
-        stock = generer_stock(type_jeu, nb_boites)
-        image_prete = preparer_image(image_originale, len(stock), activer_contours)
+        image_prete = preparer_image(image_originale, largeur_grille, hauteur_grille, activer_contours)
         
         st.image(image_prete, caption=f"Dimensions : {image_prete.width} × {image_prete.height} cases", width=400)
         st.info("💡 Modifiez le nombre de boîtes ou la case 'Contours' à gauche pour ajuster cet aperçu en temps réel. Lancez la génération quand le rendu vous plaît !")
@@ -88,31 +107,8 @@ with col2:
         try:
             with st.spinner("Calculs en cours..."):
 
-                # 1. Calcul du stock maximum de cases
-                taille_boite = 28 if type_jeu == "double_six" else 55
-                stock_max_dominos = nb_boites * taille_boite
-                cases_max_dispo = stock_max_dominos * 2
-                
-                # 2. Analyse des proportions de l'image
-                largeur_px, hauteur_px = image_originale.size
-                ratio = hauteur_px / largeur_px
-                
-                # Calcul de la taille maximale possible
-                # On sait que : (largeur * (largeur * ratio)) ne doit pas dépasser cases_max_dispo
-                largeur_grille = int(math.sqrt(cases_max_dispo / ratio))
-                hauteur_grille = int(largeur_grille * ratio)
-                
-                # 4. Sécurité mathématique : forcer un nombre pair de cases (pour des pièces de 1x2)
-                if (largeur_grille * hauteur_grille) % 2 != 0:
-                    hauteur_grille -= 1
-                    
-                nb_dominos = (largeur_grille * hauteur_grille) // 2
                 vmax  = valeur_max(type_jeu)
-
-                # Prétraitement image
-                image_prete = preparer_image(image_originale, largeur_grille, hauteur_grille, activer_contours)
                 matrice_valeurs = image_vers_matrice(image_prete, type_jeu)
-
                 inventaire = completer_inventaire(nb_dominos, type_jeu, matrice_valeurs)
 
                 # Garde-fou Hongrois
