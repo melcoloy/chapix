@@ -48,6 +48,7 @@ st.sidebar.header("Paramètres")
 type_jeu       = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"), key="widget_type_jeu")
 nb_boites      = st.sidebar.number_input("Nombre de boîtes disponibles :", min_value=1, value=80, step=10)
 choix_algo     = st.sidebar.radio("Algorithme :", list(ALGOS.keys()), key="widget_algo", help=expli_algos)
+luminosite = st.sidebar.slider("Luminosité :", min_value=0.5, max_value=3.0, value=1.0, step=0.1)  
 contraste = st.sidebar.slider("Contraste :", min_value=0.5, max_value=3.0, value=1.0, step=0.1)
 activer_contours  = st.sidebar.checkbox("Segmentation des contours")
 btn_generer    = st.sidebar.button("Générer la mosaïque")
@@ -70,6 +71,8 @@ with col1:
         image_originale.load()
         if contraste != 1.0:
             image_originale = ImageEnhance.Contrast(image_originale).enhance(contraste)
+        if luminosite != 1.0:
+            image_originale = ImageEnhance.Brightness(image_originale).enhance(luminosite)
         st.image(image_originale, caption="Image importée", width=400)
 
         #Calcul du nombre de dominos et des dimensions de la grille
