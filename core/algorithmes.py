@@ -142,7 +142,7 @@ def glouton(matrice: np.ndarray, stock: list, progress_callback=None,) -> list[d
 
     lignes, colonnes = matrice.shape
     nb_emplacements = (lignes * colonnes) // 2
-    step_progress = max(1, nb_emplacements // 10)
+    step_progress = max(1, nb_emplacements // 20)
 
     if len(stock) < nb_emplacements:
         raise ValueError(
@@ -206,8 +206,8 @@ def glouton(matrice: np.ndarray, stock: list, progress_callback=None,) -> list[d
 # Algorithme 2 : Hongrois (Kuhn-Munkres exact)
 # ─────────────────────────────────────────────────────────────────────
 
-LIMITE_HONGROIS = 5000  # Au-delà, la matrice de coûts devient trop lourde
-
+LIMITE_HONGROIS = 6600  # Au-delà, la matrice de coûts devient trop lourde
+                        # Correspond à max 235 boîtes d-6 ou 120 boîtes d-9
 
 def hongrois(
     matrice: np.ndarray,
@@ -236,7 +236,7 @@ def hongrois(
             "Réduisez la largeur ou utilisez l'algorithme Glouton."
         )
 
-    step_progress = max(1, nb // 10)
+    step_progress = max(1, nb // 20)
 
     valeurs_cibles = [(matrice[y1, x1], matrice[y2, x2]) for ((x1, y1), (x2, y2)) in emplacements]
     matrice_couts = np.zeros((nb, nb), dtype=int)

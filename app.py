@@ -19,9 +19,15 @@ from core.algorithmes import glouton, hongrois, recuit, calculer_score, LIMITE_H
 # ── Algos disponibles ─────────────────────────────────────────────────
 ALGOS = {
     "Glouton (Par le centre)":       "glouton",
-    "Hongrois (Lent, optimum mathématique)": "hongrois",
     "Méta-Heuristique (Très rapide)":      "recuit",
+    "Hongrois (Lent, optimum mathématique)": "hongrois",
 }
+
+expli_algos = """
+- **Glouton :** Rapidité moyenne, priorise le centre de l'image.
+- **Méta-heuristique :** Très rapide, idéal avec un grand nombre de boîtes.
+- **Hongrois :** Très lent, solution mathématique optimale (maximum 235 boîtes double-six ou 120 boîtes double-neuf).
+"""
 
 # =====================================================================
 # Mise en page
@@ -29,20 +35,15 @@ ALGOS = {
 
 st.set_page_config(page_title="Mosaïque de dominos", layout="wide")
 st.title("🎲 Générateur de Mosaïque en Dominos")
-st.write("Projet P4 — Matteo Hanon Obsomer & Clément Leroy")
+st.write("Matteo Hanon Obsomer & Clément Leroy")
 
 # ── Barre latérale ────────────────────────────────────────────────────
 st.sidebar.header("Paramètres")
 type_jeu       = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"), key="widget_type_jeu")
 nb_boites      = st.sidebar.number_input("Nombre de boîtes disponibles", min_value=10, value=50, step=10)
-activer_contours  = st.sidebar.checkbox("Segmentation des contours")
-choix_algo     = st.sidebar.radio("Algorithme :", list(ALGOS.keys()), key="widget_algo")
-
-st.sidebar.divider()
-st.sidebar.subheader("🎚️ Retouche")
-luminosite = st.sidebar.slider("Luminosité", min_value=0.5, max_value=2.5, value=1.0, step=0.1)
+choix_algo     = st.sidebar.radio("Algorithme :", list(ALGOS.keys()), key="widget_algo", help=expli_algos)
 contraste = st.sidebar.slider("Contraste", min_value=0.5, max_value=3.0, value=1.0, step=0.1)
-
+activer_contours  = st.sidebar.checkbox("Segmentation des contours")
 st.sidebar.divider()
 btn_generer    = st.sidebar.button("Générer la mosaïque")
 
@@ -60,10 +61,6 @@ with col1:
     if fichier:
         # Ouverture de l'image
         image_originale = Image.open(fichier)
-        
-        # --- NOUVEAUTÉ : APPLICATION DES RETOUCHES ---
-        if luminosite != 1.0:
-            image_originale = ImageEnhance.Brightness(image_originale).enhance(luminosite)
         if contraste != 1.0:
             image_originale = ImageEnhance.Contrast(image_originale).enhance(contraste)
         # ---------------------------------------------
@@ -142,7 +139,7 @@ with col2:
                 image_mosaique = dessiner_mosaique(placements, hauteur_grille, largeur_grille)
 
                 my_bar.empty()
-                
+
                 # Inventaire utilisé
                 inventaire_utilise = {}
                 for p in placements:
