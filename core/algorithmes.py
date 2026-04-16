@@ -122,7 +122,7 @@ def _tuples_vers_dicts(placements_bruts: list, emplacements: list) -> list[dict]
 # Algorithme 1 : Glouton par le centre
 # ─────────────────────────────────────────────────────────────────────
 
-def glouton(matrice: np.ndarray, stock: list) -> list[dict]:
+def glouton(matrice: np.ndarray, stock: list, progress_callback=None,) -> list[dict]:
     """
     Pavage glouton sans trou, priorité au centre de l'image.
 
@@ -142,11 +142,14 @@ def glouton(matrice: np.ndarray, stock: list) -> list[dict]:
 
     lignes, colonnes = matrice.shape
     nb_emplacements = (lignes * colonnes) // 2
+    step_progress = max(1, nb_emplacements // 10)
 
     if len(stock) < nb_emplacements:
         raise ValueError(
             f"Stock insuffisant : {len(stock)} dominos pour {nb_emplacements} emplacements."
         )
+    if progress_callback:
+        progress_callback(0.1, "Étape 1/2 : Préparation de la grille...")
 
     slots, grille = _paver_grille(lignes, colonnes)
     slots = _optimiser_orientation(slots, grille, matrice)
@@ -163,7 +166,13 @@ def glouton(matrice: np.ndarray, stock: list) -> list[dict]:
     stock_restant = list(stock)
     placements = []
 
-    for slot in slots:
+    if progress_callback:
+        progress_callback(0.3, "Étape 2/2 : Placement des dominos...")
+
+    for i,slot in enumerate(slots):
+        if progress_callback and i % step_progress == 0:
+            ratio_avancement = 0.3 + (i / nb_emplacements) * 0.6
+            progress_callback(ratio_avancement, "Étape 2/2 : Placement des dominos...")
         c1, c2 = slot
         val1, val2 = matrice[c1[0], c1[1]], matrice[c2[0], c2[1]]
 
@@ -186,6 +195,9 @@ def glouton(matrice: np.ndarray, stock: list) -> list[dict]:
         if inv:
             domino = (domino[1], domino[0])
         placements.append({"case1": c1, "case2": c2, "valeurs": domino})
+
+    if progress_callback:
+        progress_callback(0.9, "Placement terminé, préparation de l'image...")
 
     return placements
 
@@ -224,20 +236,21 @@ def hongrois(
             "Réduisez la largeur ou utilisez l'algorithme Glouton."
         )
 
-    if progress_callback:
-        progress_callback(0.1, "Étape 1/2 : Calcul de la matrice des coûts...")
+    step_progress = max(1, nb // 10)
 
     valeurs_cibles = [(matrice[y1, x1], matrice[y2, x2]) for ((x1, y1), (x2, y2)) in emplacements]
     matrice_couts = np.zeros((nb, nb), dtype=int)
 
     for i, (c1, c2) in enumerate(valeurs_cibles):
+        if progress_callback and i % step_progress == 0:
+            progress_callback(0.1 + (i / nb) * 0.5, "Étape 1/2 : Calcul de la matrice des coûts...")
         for j, domino in enumerate(stock):
             err_n = abs(domino[0] - c1) + abs(domino[1] - c2)
             err_i = abs(domino[1] - c1) + abs(domino[0] - c2)
             matrice_couts[i, j] = min(err_n, err_i)
 
     if progress_callback:
-        progress_callback(0.5, "Étape 2/2 : Résolution mathématique exacte...")
+        progress_callback(0.7, "Étape 2/2 : Résolution mathématique...")
 
     _, col_ind = linear_sum_assignment(matrice_couts)
 
@@ -248,7 +261,8 @@ def hongrois(
         err_n = abs(domino[0] - c1) + abs(domino[1] - c2)
         err_i = abs(domino[1] - c1) + abs(domino[0] - c2)
         placements_bruts.append(domino if err_n <= err_i else (domino[1], domino[0]))
-
+    if progress_callback:
+        progress_callback(1.0, "Conversion des résultats terminée.")
     return _tuples_vers_dicts(placements_bruts, emplacements)
 
 

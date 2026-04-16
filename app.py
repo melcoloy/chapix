@@ -129,8 +129,7 @@ with col2:
                 debut = time.time()
 
                 if ALGOS[choix_algo] == "glouton":
-                    placements = glouton(matrice_valeurs, inventaire)
-                    my_bar.empty()
+                    placements = glouton(matrice_valeurs, inventaire, progress_callback=progress)
                 elif ALGOS[choix_algo] == "hongrois":
                     placements = hongrois(matrice_valeurs, inventaire, progress_callback=progress)
                 else:  # recuit
@@ -139,8 +138,11 @@ with col2:
                 temps = time.time() - debut
 
                 # Dessin de base (sans surbrillance)
+                progress(0.95, "Dessin de la mosaïque")
                 image_mosaique = dessiner_mosaique(placements, hauteur_grille, largeur_grille)
 
+                my_bar.empty()
+                
                 # Inventaire utilisé
                 inventaire_utilise = {}
                 for p in placements:
