@@ -22,8 +22,8 @@ Développé par **Matteo Hanon Obsomer** et **Clément Leroy**.
 
 ## 📁 Structure du projet
 
-```
-kkbox/
+```text
+chapix/
 ├── app.py              # Interface Streamlit (UI uniquement)
 ├── core/
 │   ├── __init__.py
@@ -42,12 +42,17 @@ kkbox/
 
 **1. Cloner le dépôt :**
 ```bash
-git clone https://github.com/melcoloy/chapix.git
+git clone [https://github.com/melcoloy/chapix.git](https://github.com/melcoloy/chapix.git)
 cd chapix
 ```
 
+**2. Installer les dépendances :**
+```bash
+pip install streamlit scipy numpy Pillow opencv-python
+```
 
-**2. Lancer l'application :**
+
+**3. Lancer l'application :**
 ```bash
 py -m streamlit run app.py
 ```
@@ -62,7 +67,7 @@ py -m streamlit run app.py
 3. Assignation gloutonne du stock, du centre de l'image vers les bords.
 
 ### Hongrois (Kuhn-Munkres)
-Construit une matrice de coûts N×N entre chaque emplacement et chaque domino disponible, puis résout le problème d'affectation optimale via `scipy.optimize.linear_sum_assignment`. Garantit le minimum d'erreur global mais limité à 5 000 emplacements (mémoire).
+Construit une matrice de coûts N×N entre chaque emplacement et chaque domino disponible, puis résout le problème d'affectation optimale via scipy.optimize.linear_sum_assignment. Garantit le minimum d'erreur global, mais est limité à 6 600 emplacements par sécurité afin de prévenir toute surcharge de la mémoire vive (RAM).
 
 ### Recuit simulé
-Échange aléatoire de dominos entre emplacements, accepté selon le critère de Metropolis. Permet d'échapper aux minima locaux du glouton sans le coût mémoire du hongrois.
+Échange aléatoire de dominos entre emplacements, accepté selon le critère de Metropolis. Permet d'échapper aux minima locaux du glouton sans le coût mémoire de l'algorithme hongrois. (Par défaut : 150 000 itérations avec une décroissance thermique paramétrée).
