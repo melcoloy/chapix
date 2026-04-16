@@ -32,19 +32,24 @@ expli_algos = """
 # =====================================================================
 # Mise en page
 # =====================================================================
-
+st.markdown("""
+    <style>
+        .block-container {
+            padding-top: 1.5rem; 
+        }
+    </style>
+""", unsafe_allow_html=True)#Permet de remonter le titre pour pas laisser un espace vide trop grand
 st.set_page_config(page_title="Mosaïque de dominos", layout="wide")
 st.title("🎲 Générateur de Mosaïque en Dominos")
-st.write("Matteo Hanon Obsomer & Clément Leroy")
+st.write("Par Matteo Hanon Obsomer & Clément Leroy")
 
 # ── Barre latérale ────────────────────────────────────────────────────
 st.sidebar.header("Paramètres")
 type_jeu       = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"), key="widget_type_jeu")
-nb_boites      = st.sidebar.number_input("Nombre de boîtes disponibles", min_value=10, value=50, step=10)
+nb_boites      = st.sidebar.number_input("Nombre de boîtes disponibles", min_value=1, value=80, step=10)
 choix_algo     = st.sidebar.radio("Algorithme :", list(ALGOS.keys()), key="widget_algo", help=expli_algos)
 contraste = st.sidebar.slider("Contraste", min_value=0.5, max_value=3.0, value=1.0, step=0.1)
 activer_contours  = st.sidebar.checkbox("Segmentation des contours")
-st.sidebar.divider()
 btn_generer    = st.sidebar.button("Générer la mosaïque")
 
 # ── Colonnes principales ──────────────────────────────────────────────
@@ -60,7 +65,9 @@ with col1:
     )
     if fichier:
         # Ouverture de l'image
-        image_originale = Image.open(fichier)
+        bytes_data = fichier.getvalue()
+        image_originale = Image.open(io.BytesIO(bytes_data))
+        image_originale.load()
         if contraste != 1.0:
             image_originale = ImageEnhance.Contrast(image_originale).enhance(contraste)
         # ---------------------------------------------
