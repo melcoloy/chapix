@@ -1,7 +1,5 @@
-"""
-app.py — Interface Streamlit du générateur de mosaïques en dominos.
-Toute la logique métier est dans le package `core/`.
-"""
+#Interface streamlit
+
 import io
 import base64
 import math
@@ -12,11 +10,10 @@ import streamlit as st
 import streamlit.components.v1 as components
 from PIL import Image, ImageEnhance
 
-from core.inventaire import generer_stock, completer_inventaire, valeur_max
+from core.inventaire import completer_inventaire, valeur_max
 from core.image import preparer_image, image_vers_matrice, dessiner_mosaique, mettre_en_evidence
 from core.algorithmes import glouton, hongrois, recuit, calculer_score, LIMITE_HONGROIS
 
-# ── Algos disponibles ─────────────────────────────────────────────────
 ALGOS = {
     "Glouton (Par le centre)":       "glouton",
     "Méta-Heuristique (Très rapide)":      "recuit",
@@ -29,26 +26,29 @@ expli_algos = """
 - **Hongrois :** Très lent, solution mathématique optimale (maximum 235 boîtes double-six ou 120 boîtes double-neuf).
 """
 
-# =====================================================================
+# ─────────────────────────────────────────────────────────────────────
 # Mise en page
-# =====================================================================
+# ─────────────────────────────────────────────────────────────────────
+
 st.markdown("""
     <style>
         .block-container {
             padding-top: 1.5rem; 
         }
     </style>
-""", unsafe_allow_html=True)#Permet de remonter le titre pour pas laisser un espace vide trop grand
+""", unsafe_allow_html=True) #Permet de remonter le titre pour pas laisser un espace vide trop grand
+
 st.set_page_config(page_title="Mosaïque de dominos", layout="wide")
 st.title("🎲 Générateur de Mosaïque en Dominos")
 st.write("Par Matteo Hanon Obsomer & Clément Leroy")
 
 # ── Barre latérale ────────────────────────────────────────────────────
 st.sidebar.header("Paramètres")
+#Choix des paramètres par l'utilisateur
 type_jeu       = st.sidebar.radio("Type de jeu :", ("double_six", "double_neuf"), key="widget_type_jeu")
-nb_boites      = st.sidebar.number_input("Nombre de boîtes disponibles", min_value=1, value=80, step=10)
+nb_boites      = st.sidebar.number_input("Nombre de boîtes disponibles :", min_value=1, value=80, step=10)
 choix_algo     = st.sidebar.radio("Algorithme :", list(ALGOS.keys()), key="widget_algo", help=expli_algos)
-contraste = st.sidebar.slider("Contraste", min_value=0.5, max_value=3.0, value=1.0, step=0.1)
+contraste = st.sidebar.slider("Contraste :", min_value=0.5, max_value=3.0, value=1.0, step=0.1)
 activer_contours  = st.sidebar.checkbox("Segmentation des contours")
 btn_generer    = st.sidebar.button("Générer la mosaïque")
 
@@ -70,14 +70,9 @@ with col1:
         image_originale.load()
         if contraste != 1.0:
             image_originale = ImageEnhance.Contrast(image_originale).enhance(contraste)
-        # ---------------------------------------------
-        
         st.image(image_originale, caption="Image importée", width=400)
-        
-        # --- APERÇU DIRECT EN TEMPS RÉEL (Que nous avons fait avant) ---
-        st.divider()
-        st.subheader("👁️ Aperçu de la grille N&B")
 
+        #Calcul du nombre de dominos et des dimensions de la grille
         # 1. Calcul du stock maximum de cases
         taille_boite = 28 if type_jeu == "double_six" else 55
         stock_max_dominos = nb_boites * taille_boite
@@ -92,25 +87,28 @@ with col1:
         largeur_grille = int(math.sqrt(cases_max_dispo / ratio))
         hauteur_grille = int(largeur_grille * ratio)
                 
-        # 4. Sécurité mathématique : forcer un nombre pair de cases (pour des pièces de 1x2)
+        # 4. Sécurité mathématique : forcer un nombre pair de cases
         if (largeur_grille * hauteur_grille) % 2 != 0:
             hauteur_grille -= 1
                     
         nb_dominos = (largeur_grille * hauteur_grille) // 2        
         
+        # Aperçu en temps réel
+        st.divider()
+        st.subheader("👁️ Aperçu de la grille N&B")
         image_prete = preparer_image(image_originale, largeur_grille, hauteur_grille, activer_contours)
-        
-        st.image(image_prete, caption=f"Dimensions : {image_prete.width} × {image_prete.height} cases", width=400)
-        st.info("💡 Modifiez le nombre de boîtes ou la case 'Contours' à gauche pour ajuster cet aperçu en temps réel. Lancez la génération quand le rendu vous plaît !")
+        st.image(image_prete, caption=f"Dimensions : {image_prete.width} × {image_prete.height} cases, soit {nb_dominos} dominos", width=400)
+        st.info("💡 Modifiez le nombre de boîtes, le contraste ou la case 'Contours' à gauche pour ajuster cet aperçu en temps réel. Lancez la génération quand le rendu vous plaît !")
 
 with col2:
     st.header("Résultat")
 
-    # ── Calcul (uniquement au clic "Générer") ─────────────────────────
+    # ______ Calcul (uniquement au clic "Générer") ____________________
     if fichier and btn_generer:
         try:
             with st.spinner("Calculs en cours..."):
 
+                #Création des données utiles aux fonctions d'optimisation
                 vmax  = valeur_max(type_jeu)
                 matrice_valeurs = image_vers_matrice(image_prete, type_jeu)
                 inventaire = completer_inventaire(nb_dominos, type_jeu, matrice_valeurs)
@@ -141,7 +139,7 @@ with col2:
 
                 temps = time.time() - debut
 
-                # Dessin de base (sans surbrillance)
+                # Dessin de la mosaïque de base (sans mise en évidence)
                 progress(0.95, "Dessin de la mosaïque")
                 image_mosaique = dessiner_mosaique(placements, hauteur_grille, largeur_grille)
 
@@ -176,7 +174,7 @@ with col2:
             st.error(f"❌ Erreur inattendue : {e}")
             st.stop()
 
-    # ── Affichage (depuis la session) ─────────────────────────────────
+    # ______ Affichage et Analyse des résultats ____________________
     if fichier and "placements" in st.session_state:
         placements     = st.session_state["placements"]
         matrice_ref    = st.session_state["matrice_reference"]
@@ -189,14 +187,14 @@ with col2:
 
         st.success(f"🎉 {len(placements)} dominos placés !")
 
-        # ── Inspecteur de dominos  ────────────────────
+        # Inspecteur de dominos
         col_titre, col_boutons = st.columns([3.3, 1])
         
         with col_titre:
             st.subheader("🔍 Inspecteur de dominos")
         
         # Impression et téléchargement
-        # 1. On prépare l'image en arrière-plan
+        # 1. On prépare l'image
         buf = io.BytesIO()
         image_mosaique.save(buf, format="PNG")
         b64_image = base64.b64encode(buf.getvalue()).decode("utf-8")
@@ -227,7 +225,7 @@ with col2:
         with col_boutons:
             components.html(html_boutons, height=55)
 
-        #Inspecteur de dominos
+        # Choix du domino à rechercher
         liste_options = ["Afficher l'image normale"] + list(inventaire.keys())
         choix_domino  = st.selectbox("Mettre en évidence un type de domino :", liste_options)
 
@@ -238,6 +236,7 @@ with col2:
             d1, d2   = int(valeurs[0].strip()), int(valeurs[1].strip())
             image_a_afficher = mettre_en_evidence(image_mosaique, placements, colonnes_g, (d1, d2))
 
+        # Affichage de l'image avec les dominos mis en évidence
         st.image(image_a_afficher, caption="Mosaïque", width='stretch')
 
         # Métriques
@@ -249,7 +248,7 @@ with col2:
         st.divider()
 
 
-        # ── Rapport d'inventaire ───────────────────────────────────────
+        # Rapport d'inventaire
         st.subheader("📊 Rapport d'inventaire")
 
         col_tab, _ = st.columns([1.5, 2])

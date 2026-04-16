@@ -1,10 +1,7 @@
-"""
-Traitement d'image : préparation, conversion en matrice, dessin, mise en évidence.
-"""
+#Traitement d'image : préparation, conversion en matrice, dessin, mise en évidence.
+
 from PIL import Image, ImageDraw, ImageOps, ImageFilter
 import numpy as np
-
-_DIMENSION_MIN = 2
 
 _DISPOSITION_PIPS = {
     0: [],
@@ -20,15 +17,14 @@ _DISPOSITION_PIPS = {
 }
 
 
+#Redimensionne l'image si nécessaire, la convertit en niveaux de gris et met en évidence les contours
 def preparer_image(
     image_originale: Image.Image,
     largeur: int,
     hauteur: int,
     renforcer_contours: bool = False,
 ) -> Image.Image:
-    """
-    Convertit l'image en niveaux de gris.
-    """
+    
     if not isinstance(image_originale, Image.Image):
         raise TypeError(f"Attendu PIL.Image, reçu : {type(image_originale).__name__}")
     image_redimensionnee = image_originale.resize((largeur, hauteur), Image.Resampling.LANCZOS)
@@ -38,16 +34,13 @@ def preparer_image(
 
     return image_nb
 
-
+#Convertit l'image vers une matrice de valeurs, en appliquant le dithering (propagation de l'erreur)
 def image_vers_matrice(
     image_pil: Image.Image,
     type_jeu: str = "double_six",
     appliquer_dithering: bool = True,
 ) -> np.ndarray:
-    """
-    Convertit une image PIL en matrice de valeurs de dominos,
-    avec propagation d'erreur optionnelle (Floyd-Steinberg).
-    """
+    
     from core.inventaire import valeur_max as get_valeur_max
 
     if not isinstance(image_pil, Image.Image):
@@ -80,25 +73,14 @@ def image_vers_matrice(
     matrice = np.clip(matrice, 0, vmax).astype(int)
     return vmax - matrice  # inversion : blanc = fond blanc
 
-
+#Retourne la mosaïque finale dessinée à partir de l'emplacement des dominos
 def dessiner_mosaique(
     placements: list[dict],
     lignes: int,
     colonnes: int,
     taille_case: int = 40,
 ) -> Image.Image:
-    """
-    Génère l'image de base de la mosaïque (sans surbrillance).
-
-    Args:
-        placements: liste de dicts {"case1", "case2", "valeurs"}.
-        lignes: hauteur de la grille en cases.
-        colonnes: largeur de la grille en cases.
-        taille_case: taille en pixels d'une case (défaut 40).
-
-    Returns:
-        PIL.Image RGB.
-    """
+    
     if not placements:
         raise ValueError("La liste de placements est vide.")
     if lignes < 1 or colonnes < 1:
@@ -158,7 +140,7 @@ def dessiner_mosaique(
 
     return image_finale
 
-
+#Encadre en rouge les dominos recherchés sur l'image fournie
 def mettre_en_evidence(
     image_base: Image.Image,
     placements: list[dict],

@@ -1,9 +1,6 @@
-"""
-Algorithmes de placement de dominos.
+#Algorithmes de placement de dominos.
+#Tous les algorithmes retournent une liste de dicts : [{"case1": (i, j), "case2": (i, j), "valeurs": (v1, v2)}, ...]
 
-Tous les algorithmes retournent une liste de dicts :
-    [{"case1": (i, j), "case2": (i, j), "valeurs": (v1, v2)}, ...]
-"""
 import math
 import random
 import numpy as np
@@ -11,21 +8,12 @@ from scipy.optimize import linear_sum_assignment
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Utilitaires partagés
+# Fonctions utilitaires 
 # ─────────────────────────────────────────────────────────────────────
 
-def _erreur_domino(domino: tuple, cible1: int, cible2: int) -> tuple[int, tuple]:
-    """Retourne (erreur_min, domino_orienté_au_mieux)."""
-    err_norm = abs(domino[0] - cible1) + abs(domino[1] - cible2)
-    err_inv  = abs(domino[1] - cible1) + abs(domino[0] - cible2)
-    return (err_norm, domino) if err_norm <= err_inv else (err_inv, (domino[1], domino[0]))
-
-
+#Pavage initial sans trou : tout horizontal si colonnes pair, tout vertical sinon (glouton)
 def _paver_grille(lignes: int, colonnes: int) -> tuple[list, np.ndarray]:
-    """
-    Pavage initial sans trou : tout horizontal si colonnes pair, tout vertical sinon.
-    Retourne (placements_slots, grille_slots).
-    """
+    
     placements_slots = []
     grille_slots = np.zeros((lignes, colonnes), dtype=int)
     idx = 0
@@ -45,14 +33,9 @@ def _paver_grille(lignes: int, colonnes: int) -> tuple[list, np.ndarray]:
 
     return placements_slots, grille_slots
 
-
-def _optimiser_orientation(
-    placements_slots: list, grille_slots: np.ndarray, matrice: np.ndarray
-) -> list:
-    """
-    Swapping 2×2 : réoriente les dominos pour mieux suivre les contours.
-    Modifie placements_slots en place et retourne la liste.
-    """
+#Change l'orientation des dominos deux à deux si ça améliore (glouton)
+def _optimiser_orientation(placements_slots: list, grille_slots: np.ndarray, matrice: np.ndarray) -> list:
+    
     lignes, colonnes = matrice.shape
     amelioration = True
     iterations = 0
@@ -92,9 +75,15 @@ def _optimiser_orientation(
 
     return placements_slots
 
+#Vérifie le meilleur sens des dominos (recuit)
+def _erreur_domino(domino: tuple, cible1: int, cible2: int) -> tuple[int, tuple]:
+    err_norm = abs(domino[0] - cible1) + abs(domino[1] - cible2)
+    err_inv  = abs(domino[1] - cible1) + abs(domino[0] - cible2)
+    return (err_norm, domino) if err_norm <= err_inv else (err_inv, (domino[1], domino[0]))
 
+#Pavage initial (hongrois et recuit)
 def _generer_emplacements(largeur: int, hauteur: int) -> list[tuple]:
-    """Génère la liste des paires de cases (emplacements) pour les algos V2."""
+    
     occupee = [[False] * largeur for _ in range(hauteur)]
     emplacements = []
     for y in range(hauteur):
@@ -109,34 +98,79 @@ def _generer_emplacements(largeur: int, hauteur: int) -> list[tuple]:
                 occupee[y][x] = occupee[y + 1][x] = True
     return emplacements
 
-
+#Convertit une liste de tuples (v1, v2) en liste de dicts universels (hongrois et recuit)
 def _tuples_vers_dicts(placements_bruts: list, emplacements: list) -> list[dict]:
-    """Convertit une liste de tuples (v1, v2) en liste de dicts universels."""
+    
     return [
         {"case1": (y1, x1), "case2": (y2, x2), "valeurs": (v1, v2)}
         for (v1, v2), ((x1, y1), (x2, y2)) in zip(placements_bruts, emplacements)
     ]
 
+#Calcule la fidélité de la mosaïque en pondérant l'importance de chaque pixel, ceux au centre ou sur les contours ont plus de poids
+def calculer_score(placements: list[dict], matrice_ref: np.ndarray, vmax: int) -> float:
+    
+    if not placements:
+        return 0.0
+
+    lignes, colonnes = matrice_ref.shape
+
+    # 1. Création de la matrice de poids (importance de chaque case)
+    poids = np.ones((lignes, colonnes))
+
+    # A. Pondération radiale (Le centre est plus important)
+    centre_x, centre_y = colonnes / 2, lignes / 2
+    dist_max = np.sqrt(centre_x**2 + centre_y**2)
+    
+    for i in range(lignes):
+        for j in range(colonnes):
+            dist_centre = np.sqrt((j - centre_x)**2 + (i - centre_y)**2)
+            # Ajoute jusqu'à +1.0 de poids pour le centre exact
+            poids[i, j] += 1.0 - (dist_centre / dist_max)
+
+    # B. Pondération par les contours (Gradient de l'image)
+    # Calcule la variation de contraste en X et Y
+    gy, gx = np.gradient(matrice_ref)
+    gradient = np.sqrt(gx**2 + gy**2)
+    
+    if np.max(gradient) > 0:
+        # Les zones de très fort contraste reçoivent un bonus de poids de +3.0
+        gradient = (gradient / np.max(gradient)) * 3.0
+        
+    poids += gradient
+
+    # 2. Calcul des erreurs pondérées
+    erreur_totale = 0.0
+    poids_total_max = 0.0
+
+    for p in placements:
+        i1, j1 = p["case1"]
+        i2, j2 = p["case2"]
+        v1, v2 = p["valeurs"]
+
+        # Erreur pour la première moitié du domino
+        err1 = abs(matrice_ref[i1, j1] - v1)
+        erreur_totale += err1 * poids[i1, j1]
+        poids_total_max += vmax * poids[i1, j1]
+
+        # Erreur pour la seconde moitié du domino
+        err2 = abs(matrice_ref[i2, j2] - v2)
+        erreur_totale += err2 * poids[i2, j2]
+        poids_total_max += vmax * poids[i2, j2]
+
+    # 3. Calcul du pourcentage final
+    if poids_total_max == 0:
+        return 0.0
+        
+    score_final = 100.0 * (1.0 - (erreur_totale / poids_total_max))
+    return max(0.0, score_final)
 
 # ─────────────────────────────────────────────────────────────────────
 # Algorithme 1 : Glouton par le centre
 # ─────────────────────────────────────────────────────────────────────
 
-def glouton(matrice: np.ndarray, stock: list, progress_callback=None,) -> list[dict]:
-    """
-    Pavage glouton sans trou, priorité au centre de l'image.
-
-    1. Pavage initial horizontal/vertical selon parité des colonnes.
-    2. Swapping 2×2 pour mieux suivre les contours.
-    3. Assignation gloutonne du stock, du centre vers les bords.
-
-    Args:
-        matrice: np.ndarray 2D de valeurs entières.
-        stock: liste de tuples (v1, v2).
-
-    Returns:
-        Liste de dicts {"case1", "case2", "valeurs"}.
-    """
+#Assignation gloutonne (pas de retour en arrière), du centre vers les bords
+def glouton(matrice: np.ndarray, stock: list, progress_callback=None) -> list[dict]:
+    
     if not isinstance(matrice, np.ndarray) or matrice.ndim != 2 or matrice.size == 0:
         raise ValueError("matrice doit être un numpy 2D non vide.")
 
@@ -201,30 +235,16 @@ def glouton(matrice: np.ndarray, stock: list, progress_callback=None,) -> list[d
 
     return placements
 
-
 # ─────────────────────────────────────────────────────────────────────
 # Algorithme 2 : Hongrois (Kuhn-Munkres exact)
 # ─────────────────────────────────────────────────────────────────────
 
-LIMITE_HONGROIS = 6600  # Au-delà, la matrice de coûts devient trop lourde
+LIMITE_HONGROIS = 6600  # Au-delà, la matrice de coûts devient trop lourde et le temps de calcul explose
                         # Correspond à max 235 boîtes d-6 ou 120 boîtes d-9
 
-def hongrois(
-    matrice: np.ndarray,
-    stock: list,
-    progress_callback=None,
-) -> list[dict]:
-    """
-    Affectation optimale exacte par l'algorithme de Kuhn-Munkres.
-
-    Args:
-        matrice: np.ndarray 2D de valeurs entières.
-        stock: liste de tuples (v1, v2).
-        progress_callback: callable(ratio: float, texte: str) optionnel.
-
-    Returns:
-        Liste de dicts {"case1", "case2", "valeurs"}.
-    """
+#Affectation optimale par l'algo de kuhn-munkres
+def hongrois(matrice: np.ndarray, stock: list, progress_callback=None) -> list[dict]:
+    
     lignes, colonnes = matrice.shape
     emplacements = _generer_emplacements(colonnes, lignes)
     nb = len(emplacements)
@@ -265,30 +285,13 @@ def hongrois(
         progress_callback(1.0, "Conversion des résultats terminée.")
     return _tuples_vers_dicts(placements_bruts, emplacements)
 
-
 # ─────────────────────────────────────────────────────────────────────
 # Algorithme 3 : Recuit simulé (méta-heuristique)
 # ─────────────────────────────────────────────────────────────────────
 
-def recuit(
-    matrice: np.ndarray,
-    stock: list,
-    iterations: int = 150_000,
-    progress_callback=None,
-) -> list[dict]:
-    """
-    Optimisation par recuit simulé : échange aléatoire de dominos
-    accepté selon un critère de Metropolis.
-
-    Args:
-        matrice: np.ndarray 2D de valeurs entières.
-        stock: liste de tuples (v1, v2).
-        iterations: nombre d'itérations (défaut 150 000).
-        progress_callback: callable(ratio: float, texte: str) optionnel.
-
-    Returns:
-        Liste de dicts {"case1", "case2", "valeurs"}.
-    """
+#Affectation aléatoire puis optimisation par échange de dominos
+def recuit(matrice: np.ndarray, stock: list, iterations: int = 150_000, progress_callback=None) -> list[dict]:
+    
     emplacements = _generer_emplacements(matrice.shape[1], matrice.shape[0])
     inventaire = list(stock)
     random.shuffle(inventaire)
@@ -328,67 +331,3 @@ def recuit(
     return _tuples_vers_dicts(placements_bruts, emplacements)
 
 
-# ─────────────────────────────────────────────────────────────────────
-# Utilitaire : score de fidélité
-# ─────────────────────────────────────────────────────────────────────
-
-def calculer_score(placements: list[dict], matrice_ref: np.ndarray, vmax: int) -> float:
-    """
-    Calcule la fidélité de la mosaïque en pondérant l'importance de chaque pixel.
-    - Les pixels au centre de l'image ont plus de poids.
-    - Les zones de fort contraste (contours) ont un poids massif.
-    """
-    if not placements:
-        return 0.0
-
-    lignes, colonnes = matrice_ref.shape
-
-    # 1. Création de la matrice de poids (importance de chaque case)
-    poids = np.ones((lignes, colonnes))
-
-    # A. Pondération radiale (Le centre est plus important)
-    centre_x, centre_y = colonnes / 2, lignes / 2
-    dist_max = np.sqrt(centre_x**2 + centre_y**2)
-    
-    for i in range(lignes):
-        for j in range(colonnes):
-            dist_centre = np.sqrt((j - centre_x)**2 + (i - centre_y)**2)
-            # Ajoute jusqu'à +1.0 de poids pour le centre exact
-            poids[i, j] += 1.0 - (dist_centre / dist_max)
-
-    # B. Pondération par les contours (Gradient de l'image)
-    # Calcule la variation de contraste en X et Y
-    gy, gx = np.gradient(matrice_ref)
-    gradient = np.sqrt(gx**2 + gy**2)
-    
-    if np.max(gradient) > 0:
-        # Les zones de très fort contraste reçoivent un bonus de poids de +3.0
-        gradient = (gradient / np.max(gradient)) * 3.0
-        
-    poids += gradient
-
-    # 2. Calcul des erreurs pondérées
-    erreur_totale = 0.0
-    poids_total_max = 0.0
-
-    for p in placements:
-        i1, j1 = p["case1"]
-        i2, j2 = p["case2"]
-        v1, v2 = p["valeurs"]
-
-        # Erreur pour la première moitié du domino
-        err1 = abs(matrice_ref[i1, j1] - v1)
-        erreur_totale += err1 * poids[i1, j1]
-        poids_total_max += vmax * poids[i1, j1]
-
-        # Erreur pour la seconde moitié du domino
-        err2 = abs(matrice_ref[i2, j2] - v2)
-        erreur_totale += err2 * poids[i2, j2]
-        poids_total_max += vmax * poids[i2, j2]
-
-    # 3. Calcul du pourcentage final
-    if poids_total_max == 0:
-        return 0.0
-        
-    score_final = 100.0 * (1.0 - (erreur_totale / poids_total_max))
-    return max(0.0, score_final)

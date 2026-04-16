@@ -1,14 +1,13 @@
-"""
-Génération et gestion du stock de dominos.
-"""
+#Génération et gestion du stock de dominos.
+
 import random
 import numpy as np
 
 _TYPES_JEU = {"double_six": 6, "double_neuf": 9}
 
 
+#Retourne la valeur max d'un type de jeu
 def valeur_max(type_jeu: str) -> int:
-    """Retourne la valeur maximale d'un pip pour le type de jeu donné."""
     if type_jeu not in _TYPES_JEU:
         raise ValueError(
             f"Type de jeu invalide : '{type_jeu}'. "
@@ -16,54 +15,21 @@ def valeur_max(type_jeu: str) -> int:
         )
     return _TYPES_JEU[type_jeu]
 
-
+#Retourne la liste des 28 ou 55 dominos d'une boîte standard.
 def boite_complete(type_jeu: str) -> list[tuple]:
-    """Retourne la liste des 28 (ou 55) dominos d'une boîte standard."""
     vmax = valeur_max(type_jeu)
     return [(i, j) for i in range(vmax + 1) for j in range(i, vmax + 1)]
 
-
-def generer_stock(type_jeu: str = "double_six", nb_boites: int = 1) -> list[tuple]:
-    """
-    Génère le stock complet de dominos pour nb_boites boîtes.
-
-    Args:
-        type_jeu: "double_six" ou "double_neuf".
-        nb_boites: nombre de boîtes (entier >= 1).
-
-    Returns:
-        Liste de tuples (i, j).
-    """
-    if not isinstance(nb_boites, int) or nb_boites < 1:
-        raise ValueError(f"nb_boites doit être un entier >= 1, reçu : {nb_boites!r}")
-    return boite_complete(type_jeu) * nb_boites
-
-
-def completer_inventaire(
-    nb_dominos_necessaires: int,
-    type_jeu: str = "double_six",
-    matrice_cibles: np.ndarray | None = None,
-) -> list[tuple]:
-    """
-    Génère exactement nb_dominos_necessaires dominos.
-    Si le nombre n'est pas un multiple de la taille d'une boîte, complète
-    intelligemment en privilégiant les pièces les plus utiles selon la matrice cible.
-
-    Args:
-        nb_dominos_necessaires: nombre exact de dominos requis.
-        type_jeu: "double_six" ou "double_neuf".
-        matrice_cibles: np.ndarray optionnel pour guider le choix des pièces de complétion.
-
-    Returns:
-        Liste de tuples (i, j).
-    """
+#Génère le nombre de dominos nécessaire, en prenant des boîtes complètes puis en complétant par les dominos les plus adaptés
+def completer_inventaire(nb_dominos_necessaires: int, type_jeu: str = "double_six", matrice_cibles: np.ndarray | None = None) -> list[tuple]:
+    
     jeu_de_base = boite_complete(type_jeu)
     taille_jeu = len(jeu_de_base)
     nb_jeux_complets = nb_dominos_necessaires // taille_jeu
     reste = nb_dominos_necessaires % taille_jeu
-
     inventaire = jeu_de_base * nb_jeux_complets
 
+    #Calcule les dominos les plus adaptés à l'image en regardant les fréquences des valeurs dans matrice_cibles
     if reste > 0:
         if matrice_cibles is not None:
             valeurs, counts = np.unique(matrice_cibles, return_counts=True)
